@@ -1,0 +1,10 @@
+(defproject scoreboard "0.1.0-SNAPSHOT"
+  :description "scoreboard"
+  :url "http://github.com/iloveponies/scoreboard"
+  :dependencies [[org.clojure/clojure "1.5.1"]
+                 [org.clojure/data.json "0.2.3"]
+                 [ring/ring-core "1.2.0"]
+                 [ring/ring-devel "1.2.0"]
+                 [http-kit "2.1.12"]
+                 [compojure "1.1.5"]]
+  :main scoreboard.core)
