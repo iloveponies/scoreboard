@@ -7,4 +7,6 @@
                  [ring/ring-devel "1.2.0"]
                  [http-kit "2.1.12"]
                  [compojure "1.1.5"]]
+  :profiles {:dev {:dependencies [[midje "1.5.1"]]
+                   :plugins [[lein-midje "3.1.1"]]}}
   :main scoreboard.core)
