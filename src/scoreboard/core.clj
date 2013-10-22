@@ -93,6 +93,12 @@
     (repo-to-scoreboard! scoreboard owner repo)
     (println "populated " repo)))
 
+(defn update-scoreboard! [scoreboard request]
+  (let [build (json/read-str (:payload (:params request)))
+        repo (get-in build ["repository" "name"])]
+    (doseq [job (jobs build)]
+      (job-to-scoreboard! scoreboard repo job))))
+
 (def scoreboard (scores/->in-memory-scores))
 (def notif (atom nil))
 
@@ -105,11 +111,8 @@
        (let [scores (scores/get-scores scoreboard repo)]
          (-> (r/response (json/write-str scores))
              (r/content-type "application/json"))))
-  (GET "/notifications" []
-       (-> (r/response (str @notif))
-           (r/content-type "text/plain")))
   (POST "/notifications" request
-        (do (swap! notif (constantly (:payload (:params request))))
+        (do (update-scoreboard! scoreboard request)
             (r/response "ok")))
   (route/not-found "not found"))
 
