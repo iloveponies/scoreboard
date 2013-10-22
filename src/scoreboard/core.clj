@@ -106,7 +106,9 @@
          (-> (r/response (json/write-str scores))
              (r/content-type "application/json"))))
   (GET "/notifications" []
-       (-> (r/response (str @notif))
+       (-> (r/response (str @notif
+                            "\n"
+                            (String. (.bytes (:body @notif)))))
            (r/content-type "text/plain")))
   (POST "/notifications" request
         (do (swap! notif (constantly request))
