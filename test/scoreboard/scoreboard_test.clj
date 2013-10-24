@@ -103,11 +103,29 @@
                 :points 3
                 :max-points 3)))
 
+(fact "is-prefix-of?"
+  (is-prefix-of? ["ilp" "td"] ["ilp" "td" "1"])
+  => true
+  (is-prefix-of? ["ilp" "td" "1"] ["ilp" "td" "1"])
+  => true
+  (is-prefix-of? [] ["ilp" "td" "1"])
+  => true
+  (is-prefix-of? ["ilp" "td" "1"] [])
+  => false
+  (is-prefix-of? ["ilp" "st"] ["ilp" "td" "1"])
+  => false
+  (is-prefix-of? ["ilp" "td" "1"] ["ilp" "td" "11"])
+  => false)
+
 (fact "scores-at-level"
   (let [score-1 (->score :user "Matti"
                          :exercise "ilp.td.1"
                          :points 1
                          :max-points 1)
+        score-11 (->score :user "Matti"
+                          :exercise "ilp.td.11"
+                          :points 1
+                          :max-points 1)
         score-2 (->score :user "Matti"
                          :exercise "ilp.td.2"
                          :points 1
@@ -115,7 +133,7 @@
   (scores-at-level (add-score (->scoreboard) score-1) "ilp.td.1")
   => (add-score (->scoreboard) score-1)
   (scores-at-level (add-score (->scoreboard) score-1) "ilp.td.2")
-  => (->scoreboard)
+  => empty?
   (scores-at-level (-> (->scoreboard)
                        (add-score score-1)
                        (add-score score-2))
@@ -124,10 +142,20 @@
   (scores-at-level (-> (->scoreboard)
                        (add-score score-1)
                        (add-score score-2))
+                   "")
+  => (-> (->scoreboard)
+         (add-score score-1)
+         (add-score score-2))
+  (scores-at-level (-> (->scoreboard)
+                       (add-score score-1)
+                       (add-score score-2))
                    "ilp.td")
   => (-> (->scoreboard)
          (add-score score-1)
-         (add-score score-2))))
+         (add-score score-2))
+  (scores-at-level (add-score (->scoreboard) score-11)
+                   "ilp.td.1")
+  => empty?))
 
 (fact "total-score-at-level"
   (let [score-1 (->score :user "Matti"
@@ -150,13 +178,22 @@
                          :exercise "ilp.sd.1"
                          :points 1
                          :max-points 1)]
+    (total-score-at-level (add-score (->scoreboard) score-1) "ilp.td.1")
+    => #{score-1}
     (total-score-at-level (->scoreboard) "ilp.td")
+    => empty?
+    (total-score-at-level (add-score (->scoreboard) score-3) "ilp.td.1")
     => empty?
     (total-score-at-level (-> (->scoreboard)
                               (add-score score-1)
                               (add-score score-2))
                           "ilp.td")
     => #{score-1+2}
+    (total-score-at-level (-> (->scoreboard)
+                              (add-score score-1)
+                              (add-score score-2))
+                          "")
+    => #{(assoc score-1+2 :exercise "")}
     (total-score-at-level (-> (->scoreboard)
                               (add-score score-1)
                               (add-score no-score-1))

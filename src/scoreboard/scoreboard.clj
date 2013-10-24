@@ -30,14 +30,26 @@
                         (= exercise (:exercise score))))
                  scoreboard)))
 
+(defn is-prefix-of? [predix-seq seq]
+  (cond (empty? predix-seq) true
+        (empty? seq) false
+        :else (and (= (first predix-seq) (first seq))
+                   (is-prefix-of? (rest predix-seq)
+                                  (rest seq)))))
+
 (defn scores-at-level [scoreboard level]
-  (clojure.set/select (fn [score] (.startsWith (:exercise score) level))
+  (clojure.set/select (fn [score]
+                        (or (empty? level)
+                            (is-prefix-of? (.split level "\\.")
+                                           (.split (:exercise score) "\\."))))
                       scoreboard))
 
 (defn total-score-at-level [scoreboard level]
   (set
-   (for [[_ scores] (clojure.set/index scoreboard [:user])]
-     (assoc (apply sum-score (scores-at-level scores level))
+   (for [[_ scores] (clojure.set/index scoreboard [:user])
+         :let [scores (scores-at-level scores level)]
+         :when (not (empty? scores))]
+     (assoc (apply sum-score scores)
        :exercise level))))
 
 (defn add-score [scoreboard score]
