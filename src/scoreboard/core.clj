@@ -105,5 +105,5 @@
                      :access-control-allow-origin #".*"))]
     (server/run-server handler {:port (Integer. port)})
     (println "populating scoreboard")
-    (populate-scoreboard! scoreboard "iloveponies")
+    ;;(populate-scoreboard! scoreboard "iloveponies")
     (println "scoreboard populated")))
