@@ -4,6 +4,7 @@
             [org.httpkit.client :as http]
             [ring.middleware.reload :as reload]
             [ring.middleware.params :as params]
+            [ring.middleware.cors :as cors]
             [ring.util.response :as r]
             [compojure.handler :as handler]
             [compojure.route :as route]
@@ -60,15 +61,6 @@
           scoreboard
           (grading-data job)))
 
-(defn repo-to-scoreboard! [scoreboard owner repo]
-  (doseq [build (builds owner repo)
-          job (jobs build)]
-    (job-to-scoreboard scoreboard repo job)))
-
-(defn populate-scoreboard! [scoreboard owner]
-  (doseq [repo (repositories owner)]
-    (repo-to-scoreboard! scoreboard owner repo)))
-
 (defn update-scoreboard! [scoreboard request]
   (let [build (json/read-str (:payload (:params request)))
         repo (get-in build ["repository" "name"])]
@@ -80,15 +72,26 @@
     (scoreboard/total-score-at-level scoreboard level)
     (scoreboard/scores-at-level scoreboard level)))
 
+(defn repo-to-scoreboard! [scoreboard owner repo]
+  (doseq [build (builds owner repo)
+          job (jobs build)]
+    (send scoreboard job-to-scoreboard repo job)))
+
+(defn populate-scoreboard! [scoreboard owner]
+  (doseq [repo (repositories owner)
+          build (builds owner repo)
+          job (jobs build)]
+    (send scoreboard job-to-scoreboard repo job)))
+
 (def scoreboard (agent (scoreboard/->scoreboard)))
 
 (defroutes routes
-  (GET "/scoreboard" [total?]
-       (-> (r/response (json/write-str (get-scores @scoreboard "" total?)))
+  (GET "/scoreboard" [total]
+       (-> (r/response (json/write-str (get-scores @scoreboard "" total)))
            (r/content-type "application/json")))
-  (GET "/scoreboard/*" [* total?]
+  (GET "/scoreboard/*" [* total]
        (let [level (.replace * \/ \.)]
-         (-> (r/response (json/write-str (get-scores @scoreboard level total?)))
+         (-> (r/response (json/write-str (get-scores @scoreboard level total)))
              (r/content-type "application/json"))))
   (POST "/notifications" request
         (do (update-scoreboard! scoreboard request)
@@ -96,12 +99,11 @@
   (route/not-found "not found"))
 
 (defn -main [port]
-  (let [handler (-> (handler/site #'routes)
-                    reload/wrap-reload
-                    params/wrap-params)]
+  (let [handler (-> routes
+                    params/wrap-params
+                    (cors/wrap-cors
+                     :access-control-allow-origin #".*"))]
     (server/run-server handler {:port (Integer. port)})
-    ;;(println "populating scoreboard")
-    ;;(populate-scoreboard! scoreboard "iloveponies")
-    ;;(repo-to-scoreboard! scoreboard "iloveponies" "structured-data")
-    ;;(println "scoreboard populated")
-    ))
+    (println "populating scoreboard")
+    (populate-scoreboard! scoreboard "iloveponies")
+    (println "scoreboard populated")))
