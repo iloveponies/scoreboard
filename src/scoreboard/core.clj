@@ -66,6 +66,7 @@
                     params/wrap-params
                     (cors/wrap-cors
                      :access-control-allow-origin #".*"))]
+    (server/run-jetty handler {:port (Integer. port) :join? false})
     (doseq [repo ["training-day"
                   "i-am-a-horse-in-the-land-of-booleans"
                   "structured-data"
@@ -77,5 +78,4 @@
                   "sudoku"]]
       (println "populating" repo)
       (repo-to-scoreboard! scoreboard "iloveponies" repo)
-      (println "done"))
-    (server/run-jetty handler {:port (Integer. port) :join? false})))
+      (println "done"))))
