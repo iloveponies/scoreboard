@@ -1,6 +1,6 @@
 (ns scoreboard.scoreboard)
 
-(defn ->score [& {:keys [user exercise points max-points] :as s}]
+(defn ->score [& {:keys [user repo exercise points max-points] :as s}]
   s)
 
 (defn ->scoreboard []
@@ -24,38 +24,36 @@
   ([score score' & r]
      (reduce sum-score (sum-score score score') r)))
 
-(defn score-by-user-exercise [scoreboard user exercise]
-  (first (clojure.set/select (fn [score]
-                   (and (= user (:user score))
-                        (= exercise (:exercise score))))
-                 scoreboard)))
+(defn one-by-score [scoreboard score]
+  (first (clojure.set/select (fn [{:keys [user repo exercise]}]
+                               (and (= user (:user score))
+                                    (= repo (:repo score))
+                                    (= exercise (:exercise score))))
+                             scoreboard)))
 
-(defn is-prefix-of? [predix-seq seq]
-  (cond (empty? predix-seq) true
-        (empty? seq) false
-        :else (and (= (first predix-seq) (first seq))
-                   (is-prefix-of? (rest predix-seq)
-                                  (rest seq)))))
+(defn select-by-repo [scoreboard repo]
+  (clojure.set/select (fn [score] (= repo (:repo score))) scoreboard))
 
-(defn scores-at-level [scoreboard level]
-  (clojure.set/select (fn [score]
-                        (or (empty? level)
-                            (is-prefix-of? (.split level "\\.")
-                                           (.split (:exercise score) "\\."))))
-                      scoreboard))
+(defn select-by-user [scoreboard user]
+  (clojure.set/select (fn [score] (= user (:user score))) scoreboard))
 
-(defn total-score-at-level [scoreboard level]
+(defn total-scores [scoreboard]
   (set
-   (for [[_ scores] (clojure.set/index scoreboard [:user])
-         :let [scores (scores-at-level scores level)]
+   (for [[_ scores] (group-by :user scoreboard)
          :when (not (empty? scores))]
-     (assoc (apply sum-score scores)
-       :exercise level))))
+     (apply sum-score scores))))
+
+(defn total-scores-by-repo [scoreboard repo]
+  (total-scores (select-by-repo scoreboard repo)))
+
+(defn user-scores [scoreboard user]
+  (set
+   (for [[_ scores] (group-by :repo (select-by-user scoreboard user))
+         :when (not (empty? scores))]
+     (apply sum-score scores))))
 
 (defn add-score [scoreboard score]
-  (if-let [previous-score (score-by-user-exercise scoreboard
-                                                  (:user score)
-                                                  (:exercise score))]
+  (if-let [previous-score (one-by-score scoreboard score)]
     (-> (disj scoreboard previous-score)
         (conj (max-score previous-score score)))
     (conj scoreboard score)))

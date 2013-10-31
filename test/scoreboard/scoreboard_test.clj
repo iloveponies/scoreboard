@@ -2,6 +2,31 @@
   (:require [midje.sweet :refer :all]
             [scoreboard.scoreboard :refer :all]))
 
+(def matti-ilp-td-1 (->score :user "Matti"
+                             :exercise "ilp.td.1."
+                             :points 1
+                             :max-points 1))
+(def teppo-ilp-td-1 (->score :user "Teppo"
+                             :exercise "ilp.td.1."
+                             :points 1
+                             :max-points 1))
+(def matti-ilp-td-1-no-points (->score :user "Matti"
+                                       :exercise "ilp.td.1."
+                                       :points 1
+                                       :max-points 1))
+(def matti-ilp-td-2 (->score :user "Matti"
+                         :exercise "ilp.td.2."
+                         :points 1
+                         :max-points 1))
+(def matti-ilp-sd-1 (->score :user "Matti"
+                         :exercise "ilp.sd.1."
+                         :points 1
+                         :max-points 1))
+(def matti-ilp-sd-1-no-points (->score :user "Matti"
+                                       :exercise "ilp.sd.1."
+                                       :points 0
+                                       :max-points 1))
+
 (fact "add-score"
   (let [no-score (->score :user "Matti"
                           :exercise "ilp.td.1"
@@ -15,18 +40,6 @@
     => #{no-score}
     (add-score #{no-score} score)
     => (contains score)))
-
-(fact "max-score"
-  (let [score (->score :user "Matti"
-                       :exercise "ilp.td.1"
-                       :points 1
-                       :max-points 1)
-        no-score (->score :user "Matti"
-                          :exercise "ilp.td.1"
-                          :points 0
-                          :max-points 1)]
-    (max-score score no-score)
-    => score))
 
 (fact "score-by-user-exercise"
   (let [score (->score :user "Matti"
@@ -74,6 +87,18 @@
                             "Matti" "ilp.td.1")
     => score))
 
+(fact "max-score"
+  (let [score (->score :user "Matti"
+                       :exercise "ilp.td.1"
+                       :points 1
+                       :max-points 1)
+        no-score (->score :user "Matti"
+                          :exercise "ilp.td.1"
+                          :points 0
+                          :max-points 1)]
+    (max-score score no-score)
+    => score))
+
 (fact "sum-score"
   (let [score-1 (->score :user "Matti"
                          :exercise "ilp.td.1"
@@ -103,135 +128,61 @@
                 :points 3
                 :max-points 3)))
 
-(fact "is-prefix-of?"
-  (is-prefix-of? ["ilp" "td"] ["ilp" "td" "1"])
-  => true
-  (is-prefix-of? ["ilp" "td" "1"] ["ilp" "td" "1"])
-  => true
-  (is-prefix-of? [] ["ilp" "td" "1"])
-  => true
-  (is-prefix-of? ["ilp" "td" "1"] [])
-  => false
-  (is-prefix-of? ["ilp" "st"] ["ilp" "td" "1"])
-  => false
-  (is-prefix-of? ["ilp" "td" "1"] ["ilp" "td" "11"])
-  => false)
+(fact "truncate-to-level"
+  (truncate-to-level "ilp.td.1." 2)
+  => "ilp.td.1."
+  (truncate-to-level "ilp.td.1." 1)
+  => "ilp.td."
+  (truncate-to-level "ilp.td.1." 0)
+  => "ilp.")
 
-(fact "scores-at-level"
-  (let [score-1 (->score :user "Matti"
-                         :exercise "ilp.td.1"
-                         :points 1
-                         :max-points 1)
-        score-11 (->score :user "Matti"
-                          :exercise "ilp.td.11"
-                          :points 1
-                          :max-points 1)
-        score-2 (->score :user "Matti"
-                         :exercise "ilp.td.2"
-                         :points 1
-                         :max-points 1)]
-  (scores-at-level (add-score (->scoreboard) score-1) "ilp.td.1")
-  => (add-score (->scoreboard) score-1)
-  (scores-at-level (add-score (->scoreboard) score-1) "ilp.td.2")
-  => empty?
-  (scores-at-level (-> (->scoreboard)
-                       (add-score score-1)
-                       (add-score score-2))
-                   "ilp.td.1")
-  => (add-score (->scoreboard) score-1)
-  (scores-at-level (-> (->scoreboard)
-                       (add-score score-1)
-                       (add-score score-2))
-                   "")
-  => (-> (->scoreboard)
-         (add-score score-1)
-         (add-score score-2))
-  (scores-at-level (-> (->scoreboard)
-                       (add-score score-1)
-                       (add-score score-2))
-                   "ilp.td")
-  => (-> (->scoreboard)
-         (add-score score-1)
-         (add-score score-2))
-  (scores-at-level (add-score (->scoreboard) score-11)
-                   "ilp.td.1")
-  => empty?))
+(fact "group-at-level"
+  (group-at-level [matti-ilp-td-1] 2)
+  => {"ilp.td.1." [matti-ilp-td-1]}
+  (group-at-level [matti-ilp-td-1] 1)
+  => {"ilp.td." [matti-ilp-td-1]}
+  (group-at-level [matti-ilp-td-1 matti-ilp-td-2] 2)
+  => {"ilp.td.1." [matti-ilp-td-1]
+      "ilp.td.2." [matti-ilp-td-2]})
 
 (fact "total-score-at-level"
-  (let [score-1 (->score :user "Matti"
-                         :exercise "ilp.td.1"
-                         :points 1
-                         :max-points 1)
-        no-score-1 (->score :user "Matti"
-                            :exercise "ilp.td.1"
-                            :points 0
-                            :max-points 1)
-        score-2 (->score :user "Matti"
-                         :exercise "ilp.td.2"
-                         :points 1
-                         :max-points 1)
-        score-1+2 (->score :user "Matti"
-                           :exercise "ilp.td"
-                           :points 2
-                           :max-points 2)
-        score-3 (->score :user "Matti"
-                         :exercise "ilp.sd.1"
-                         :points 1
-                         :max-points 1)]
-    (total-score-at-level (add-score (->scoreboard) score-1) "ilp.td.1")
-    => #{score-1}
-    (total-score-at-level (->scoreboard) "ilp.td")
-    => empty?
-    (total-score-at-level (add-score (->scoreboard) score-3) "ilp.td.1")
-    => empty?
-    (total-score-at-level (-> (->scoreboard)
-                              (add-score score-1)
-                              (add-score score-2))
-                          "ilp.td")
-    => #{score-1+2}
-    (total-score-at-level (-> (->scoreboard)
-                              (add-score score-1)
-                              (add-score score-2))
-                          "")
-    => #{(assoc score-1+2 :exercise "")}
-    (total-score-at-level (-> (->scoreboard)
-                              (add-score score-1)
-                              (add-score no-score-1))
-                          "ilp.td")
-    => #{(assoc score-1 :exercise "ilp.td")}
-    (total-score-at-level (-> (->scoreboard)
-                              (add-score (assoc score-1
-                                           :exercise "foo.td.1"))
-                              (add-score (assoc score-2
-                                           :exercise "foo.td.2")))
-                          "foo.td")
-    => #{(->score :user "Matti"
-                  :exercise "foo.td"
-                  :points 2
-                  :max-points 2)}
-    (total-score-at-level (-> (->scoreboard)
-                              (add-score score-1)
-                              (add-score (assoc score-1 :user "Teppo")))
-                          "ilp.td")
-    => #{(->score :user "Matti"
-                  :exercise "ilp.td"
-                  :points 1
-                  :max-points 1)
-         (->score :user "Teppo"
-                  :exercise "ilp.td"
-                  :points 1
-                  :max-points 1)}
-    (total-score-at-level (-> (->scoreboard)
-                              (add-score score-1)
-                              (add-score score-3))
-                          "ilp.td")
-    => #{(assoc score-1 :exercise "ilp.td")}
-    (total-score-at-level (-> (->scoreboard)
-                              (add-score score-1)
-                              (add-score score-2)
-                              (add-score score-3))
-                          "ilp.td")
-    => #{(->score :user "Matti"
-                  :exercise "ilp.td"
-                  :points 2
-                  :max-points 2)}))
+  (total-scores-at-level (add-score (->scoreboard) matti-ilp-td-1) 0)
+  => #{(assoc matti-ilp-td-1
+         :exercise "ilp.")}
+  (total-scores-at-level (add-score (->scoreboard) matti-ilp-td-1) 1)
+  => #{(assoc matti-ilp-td-1
+         :exercise "ilp.td.")}
+  (total-scores-at-level (add-score (->scoreboard) matti-ilp-td-1) 2)
+  => #{matti-ilp-td-1}
+  (total-scores-at-level (add-score (->scoreboard) matti-ilp-td-1) 3)
+  => #{matti-ilp-td-1}
+  (total-scores-at-level (->scoreboard) 0)
+  => empty?
+  (total-scores-at-level (->scoreboard) 1)
+  => empty?
+  (total-scores-at-level (-> (->scoreboard)
+                            (add-score matti-ilp-td-1)
+                            (add-score matti-ilp-td-2))
+                        1)
+  => #{(assoc (sum-score matti-ilp-td-1 matti-ilp-td-2)
+         :exercise "ilp.td.")}
+  (total-scores-at-level (-> (->scoreboard)
+                            (add-score matti-ilp-td-1)
+                            (add-score matti-ilp-td-2))
+                        0)
+  => #{(assoc (sum-score matti-ilp-td-1 matti-ilp-td-2)
+         :exercise "ilp.")}
+  (total-scores-at-level (-> (->scoreboard)
+                            (add-score matti-ilp-td-1)
+                            (add-score matti-ilp-td-1-no-points))
+                        1)
+  => #{(assoc (max-score matti-ilp-td-1 matti-ilp-td-1-no-points)
+         :exercise "ilp.td.")}
+  (total-scores-at-level (-> (->scoreboard)
+                            (add-score matti-ilp-td-1)
+                            (add-score teppo-ilp-td-1))
+                        1)
+  => #{(assoc matti-ilp-td-1
+         :exercise "ilp.td.")
+       (assoc teppo-ilp-td-1
+         :exercise "ilp.td.")})
