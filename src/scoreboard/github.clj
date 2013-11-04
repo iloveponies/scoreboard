@@ -1,15 +1,16 @@
 (ns scoreboard.github
   (:require [clj-http.client :as http]
             [clojure.data.json :as json]
-            [rate-gate.core :as rate]))
+            [rate-gate.core :as rate]
+            [scoreboard.util :as util]))
 
 (def raw-call!
   (rate/rate-limit
    (fn [method url parameters]
      (let [user (System/getenv "GITHUB_USER")
            passwd (System/getenv "GITHUB_PASSWD")]
-       (method url {:query-params parameters
-                    :basic-auth [user passwd]})))
+       (util/try-times 5 (fn [] (method url {:query-params parameters
+                                             :basic-auth [user passwd]})))))
    5000 (* 1000 60 60)))
 
 (defn github-api!

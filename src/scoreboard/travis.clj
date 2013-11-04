@@ -2,18 +2,21 @@
   (:require [clj-http.client :as http]
             [clojure.data.json :as json]
             [rate-gate.core :as rate]
-            [scoreboard.github :as github]))
+            [scoreboard.github :as github]
+            [scoreboard.util :as util]))
 
 (def raw-call!
   (rate/rate-limit
    (fn [method url parameters]
-     (method url {:query-params parameters}))
+     (util/try-times 5 (fn [] (method url {:query-params parameters}))))
    5000 (* 1000 60 60)))
 
 (defn travis-api! [parameters & url-fragments]
   (let [url (apply str "https://api.travis-ci.org/"
                    (interpose "/" url-fragments))]
-    (json/read-str (:body (raw-call! http/get url parameters)))))
+    (json/read-str (:body (raw-call! http/get
+                                     url
+                                     parameters)))))
 
 (defn build! [build-id]
   (travis-api! {} "builds" build-id))
