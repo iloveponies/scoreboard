@@ -1,10 +1,16 @@
 (ns scoreboard.core
-  (:use [compojure.core :only [defroutes GET POST]])
+  (:use [compojure.core :only [defroutes GET POST ANY]])
   (:require [ring.adapter.jetty :as server]
             [ring.middleware.reload :as reload]
-            [ring.middleware.params :as params]
-            [ring.middleware.cors :as cors]
+            [ring.middleware.params :refer [wrap-params]]
+            [ring.middleware.keyword-params :refer [wrap-keyword-params]]
+            [ring.middleware.nested-params :refer [wrap-nested-params]]
+            [ring.middleware.session :refer [wrap-session]]
+            [ring.middleware.cors :refer [wrap-cors]]
+            [ring.middleware.basic-authentication
+             :refer [wrap-basic-authentication]]
             [ring.util.response :as r]
+            [cemerick.drawbridge :as drawbridge]
             [compojure.handler :as handler]
             [compojure.route :as route]
             [clojure.data.json :as json])
@@ -43,6 +49,17 @@
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 
+(def drawbridge-handler
+  (-> (drawbridge/ring-handler)
+      (wrap-keyword-params)
+      (wrap-nested-params)
+      (wrap-params)
+      (wrap-session)
+      (wrap-basic-authentication
+       (fn [name passwd]
+         (and (= name (System/getenv "REPL_USER"))
+              (= passwd (System/getenv "REPL_PASSWD")))))))
+
 (defroutes routes
   (GET "/scoreboard" []
        (let [scores (scoreboard/total-scores @scoreboard)]
@@ -59,13 +76,14 @@
   (POST "/notifications" request
         (do (update-scoreboard! scoreboard request)
             (r/response "ok")))
+  (ANY "/repl" request
+       (drawbridge-handler request))
   (route/not-found "not found"))
 
 (defn -main [port]
   (let [handler (-> routes
-                    params/wrap-params
-                    (cors/wrap-cors
-                     :access-control-allow-origin #".*"))]
+                    wrap-params
+                    (wrap-cors :access-control-allow-origin #".*"))]
     (server/run-jetty handler {:port (Integer. port) :join? false})
     (doseq [repo ["training-day"
                   "i-am-a-horse-in-the-land-of-booleans"
