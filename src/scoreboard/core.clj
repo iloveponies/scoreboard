@@ -62,7 +62,8 @@
   (GET "/notifications" []
        (r/response (str (:payload (:params @notif)))))
   (POST "/notifications" request
-        (do (swap! notif (constantly request))
+        (do (update-scoreboard! scoreboard request)
+            (swap! notif (constantly request))
             (r/response "ok")))
   (route/not-found "not found"))
 
@@ -72,16 +73,15 @@
                     wrap-params
                     (wrap-cors :access-control-allow-origin #".*"))]
     (server/run-jetty handler {:port (Integer. port) :join? false})
-    ;; (doseq [repo ["training-day"
-    ;;               "i-am-a-horse-in-the-land-of-booleans"
-    ;;               "structured-data"
-    ;;               "p-p-p-pokerface"
-    ;;               "predicates"
-    ;;               "recursion"
-    ;;               "looping-is-recursion"
-    ;;               "one-function-to-rule-them-all"
-    ;;               "sudoku"]]
-    ;;   (println "populating" repo)
-    ;;   (repo-to-scoreboard! scoreboard "iloveponies" repo)
-    ;;   (println "done"))
-    ))
+    (doseq [repo ["training-day"
+                  "i-am-a-horse-in-the-land-of-booleans"
+                  "structured-data"
+                  "p-p-p-pokerface"
+                  "predicates"
+                  "recursion"
+                  "looping-is-recursion"
+                  "one-function-to-rule-them-all"
+                  "sudoku"]]
+      (println "populating" repo)
+      (repo-to-scoreboard! scoreboard "iloveponies" repo)
+      (println "done"))))
