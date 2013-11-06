@@ -1,16 +1,10 @@
 (ns scoreboard.core
-  (:use [compojure.core :only [defroutes GET POST ANY]])
+  (:use [compojure.core :only [defroutes GET POST]])
   (:require [ring.adapter.jetty :as server]
             [ring.middleware.reload :as reload]
             [ring.middleware.params :refer [wrap-params]]
-            [ring.middleware.keyword-params :refer [wrap-keyword-params]]
-            [ring.middleware.nested-params :refer [wrap-nested-params]]
-            [ring.middleware.session :refer [wrap-session]]
             [ring.middleware.cors :refer [wrap-cors]]
-            [ring.middleware.basic-authentication
-             :refer [wrap-basic-authentication]]
             [ring.util.response :as r]
-            [cemerick.drawbridge :as drawbridge]
             [compojure.handler :as handler]
             [compojure.route :as route]
             [clojure.data.json :as json])
@@ -49,16 +43,7 @@
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 
-(def drawbridge-handler
-  (-> (drawbridge/ring-handler)
-      (wrap-keyword-params)
-      (wrap-nested-params)
-      (wrap-params)
-      (wrap-session)
-      (wrap-basic-authentication
-       (fn [name passwd]
-         (and (= name (System/getenv "REPL_USER"))
-              (= passwd (System/getenv "REPL_PASSWD")))))))
+(def notif (atom ""))
 
 (defroutes routes
   (GET "/scoreboard" []
@@ -73,11 +58,12 @@
        (let [scores (scoreboard/user-scores @scoreboard user)]
          (-> (r/response (json/write-str scores))
              (r/content-type "application/json"))))
+  (GET "/notifications" []
+       (r/response @notif))
   (POST "/notifications" request
         (do (update-scoreboard! scoreboard request)
+            (swap! notif (constantly (:payload (:params request))))
             (r/response "ok")))
-  (ANY "/repl" request
-       (drawbridge-handler request))
   (route/not-found "not found"))
 
 (defn -main [port]
