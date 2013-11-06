@@ -60,7 +60,7 @@
          (-> (r/response (json/write-str scores))
              (r/content-type "application/json"))))
   (GET "/notifications" []
-       (r/response @notif))
+       (r/response (str (:payload (:params @notif)))))
   (POST "/notifications" request
         (do (swap! notif (constantly request))
             (r/response "ok")))
