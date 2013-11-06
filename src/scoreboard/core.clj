@@ -3,6 +3,7 @@
   (:require [ring.adapter.jetty :as server]
             [ring.middleware.reload :as reload]
             [ring.middleware.params :refer [wrap-params]]
+            [ring.middleware.keyword-params :refer [wrap-keyword-params]]
             [ring.middleware.cors :refer [wrap-cors]]
             [ring.util.response :as r]
             [compojure.handler :as handler]
@@ -61,24 +62,26 @@
   (GET "/notifications" []
        (r/response @notif))
   (POST "/notifications" request
-        (do (swap! notif (constantly (:payload (:params request))))
+        (do (swap! notif (constantly request))
             (r/response "ok")))
   (route/not-found "not found"))
 
 (defn -main [port]
   (let [handler (-> routes
+                    wrap-keyword-params
                     wrap-params
                     (wrap-cors :access-control-allow-origin #".*"))]
     (server/run-jetty handler {:port (Integer. port) :join? false})
-    (doseq [repo ["training-day"
-                  "i-am-a-horse-in-the-land-of-booleans"
-                  "structured-data"
-                  "p-p-p-pokerface"
-                  "predicates"
-                  "recursion"
-                  "looping-is-recursion"
-                  "one-function-to-rule-them-all"
-                  "sudoku"]]
-      (println "populating" repo)
-      (repo-to-scoreboard! scoreboard "iloveponies" repo)
-      (println "done"))))
+    ;; (doseq [repo ["training-day"
+    ;;               "i-am-a-horse-in-the-land-of-booleans"
+    ;;               "structured-data"
+    ;;               "p-p-p-pokerface"
+    ;;               "predicates"
+    ;;               "recursion"
+    ;;               "looping-is-recursion"
+    ;;               "one-function-to-rule-them-all"
+    ;;               "sudoku"]]
+    ;;   (println "populating" repo)
+    ;;   (repo-to-scoreboard! scoreboard "iloveponies" repo)
+    ;;   (println "done"))
+    ))
