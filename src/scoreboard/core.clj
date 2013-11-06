@@ -61,8 +61,7 @@
   (GET "/notifications" []
        (r/response @notif))
   (POST "/notifications" request
-        (do (update-scoreboard! scoreboard request)
-            (swap! notif (constantly (:payload (:params request))))
+        (do (swap! notif (constantly (:payload (:params request))))
             (r/response "ok")))
   (route/not-found "not found"))
 
