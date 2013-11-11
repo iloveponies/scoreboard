@@ -37,6 +37,10 @@
                                "after_number" min-number}
                               "builds")))))))
 
+(defn job-log! [job]
+  (let [id (get job "id" (get-in job ["job" "id"]))]
+    (:body (raw-call! http/get (str "http://archive.travis-ci.org/jobs/" id "/log.txt") {}))))
+
 (defn job! [job-id]
   (travis-api! {} "jobs" job-id))
 

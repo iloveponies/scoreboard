@@ -13,8 +13,9 @@
             [scoreboard.travis :as travis]))
 
 (defn grading-data [job]
-  (if-let [data (second (.split (get job "log") "midje-grader:data"))]
-    (json/read-str data)))
+  (let [log (travis/job-log! job)]
+    (if-let [data (second (.split log "midje-grader:data"))]
+      (json/read-str data))))
 
 (defn job-to-scoreboard [scoreboard repo job author]
   (reduce (fn [scoreboard points]
