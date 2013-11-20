@@ -10,12 +10,14 @@
             [compojure.route :as route]
             [clojure.data.json :as json])
   (:require [scoreboard.scoreboard :as scoreboard]
+            [scoreboard.github :as github]
             [scoreboard.travis :as travis]))
 
 (defn grading-data [job]
-  (let [log (travis/job-log! job)]
+  (if-let [log (travis/log-body (travis/job-log! job))]
     (if-let [data (second (.split log "midje-grader:data"))]
-      (json/read-str data))))
+      (json/read-str data))
+    (println "log missing from job" (travis/job-id job))))
 
 (defn job-to-scoreboard [scoreboard repo job author]
   (reduce (fn [scoreboard points]
@@ -31,17 +33,24 @@
           (grading-data job)))
 
 (defn update-scoreboard! [scoreboard request]
-  (let [build (json/read-str (:payload (:params request)))
-        author (travis/build-author! build)
-        repo (get-in build ["repository" "name"])]
+  (let [build (travis/parse-notification (:payload (:params request)))
+        repo (travis/build-repo! build)
+        owner (travis/repo-owner repo)
+        name (travis/repo-name repo)
+        number (travis/build-pull-request-number build)
+        author (github/pull-request-author! owner name number)]
     (doseq [job (travis/build-jobs! build)]
-      (send scoreboard job-to-scoreboard repo job author))))
+      (send scoreboard job-to-scoreboard name job author))))
 
-(defn repo-to-scoreboard! [scoreboard owner repo]
-  (doseq [build (travis/builds! owner repo)
-          :let [author (travis/build-author! build)]
-          job (travis/build-jobs! build)]
-    (send scoreboard job-to-scoreboard repo job author)))
+(defn repo-to-scoreboard! [scoreboard owner name]
+  (let [repo (travis/repo! owner name)
+        owner (travis/repo-owner repo)
+        name (travis/repo-name repo)]
+    (doseq [build (travis/repo-builds! repo)
+            :let [number (travis/build-pull-request-number build)
+                  author (github/pull-request-author! owner name number)]
+            job (travis/build-jobs! build)]
+      (send scoreboard job-to-scoreboard name job author))))
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 

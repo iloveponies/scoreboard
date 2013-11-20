@@ -19,14 +19,29 @@
                                      url
                                      parameters)))))
 
-(defn repo! [owner repo]
-  (get (travis-api! {} "repos" owner repo) "repo"))
+(defn repo!
+  ([repo-id]
+     (get (travis-api! {} "repos" repo-id) "repo"))
+  ([owner repo]
+     (get (travis-api! {} "repos" owner repo) "repo")))
 
 (defn job! [job-id]
   (get (travis-api! {} "jobs" job-id) "job"))
 
+(defn job-id [job]
+  (get job "id"))
+
 (defn repo-id [repo]
   (get repo "id"))
+
+(defn repo-owner [repo]
+  (first (.split (get repo "slug") "/")))
+
+(defn repo-name [repo]
+  (second (.split (get repo "slug") "/")))
+
+(defn build-repo! [build]
+  (repo! (get build "repository_id")))
 
 (defn build-number [build]
   (Long/valueOf (get build "number")))
@@ -60,3 +75,6 @@
                                 "after_number" after}
                                "builds")
                   "builds"))))
+
+(defn parse-notification [payload-str]
+  (json/read-str payload-str))
