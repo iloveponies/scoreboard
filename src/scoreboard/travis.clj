@@ -2,13 +2,14 @@
   (:require [clj-http.client :as http]
             [clojure.data.json :as json]
             [rate-gate.core :as rate]
-            [scoreboard.github :as github]
             [scoreboard.util :as util]))
 
 (def raw-call!
   (rate/rate-limit
    (fn [method url parameters]
-     (util/try-times 5 (fn [] (method url {:query-params parameters}))))
+     (util/try-times 5
+                     (fn [] (method url {:query-params parameters
+                                         :headers {"Accept" "application/json; version=2"}}))))
    5000 (* 1000 60 60)))
 
 (defn travis-api! [parameters & url-fragments]
@@ -18,42 +19,44 @@
                                      url
                                      parameters)))))
 
-(defn build! [build-id]
-  (travis-api! {} "builds" build-id))
-
-(defn builds! [owner repo]
-  (let [repo-id (get (travis-api! {} "repos" owner repo) "id")]
-    (loop [builds []
-           build-chunk (travis-api! {"repository_id" repo-id
-                                     "event_type" "pull_request"}
-                                    "builds")]
-      (let [build-numbers (map #(Integer. (get % "number")) build-chunk)
-            min-number (if (empty? build-numbers) 1 (apply min build-numbers))]
-        (if (= min-number 1)
-          (map #(build! (get % "id")) (concat builds build-chunk))
-          (recur (concat builds build-chunk)
-                 (travis-api! {"repository_id" repo-id
-                               "event_type" "pull_request"
-                               "after_number" min-number}
-                              "builds")))))))
-
-(defn job-log! [job]
-  (let [id (get job "id" (get-in job ["job" "id"]))]
-    (:body (raw-call! http/get (str "http://archive.travis-ci.org/jobs/" id "/log.txt") {}))))
+(defn repo! [owner repo]
+  (get (travis-api! {} "repos" owner repo) "repo"))
 
 (defn job! [job-id]
-  (travis-api! {} "jobs" job-id))
+  (get (travis-api! {} "jobs" job-id) "job"))
+
+(defn repo-id [repo]
+  (get repo "id"))
+
+(defn build-number [build]
+  (Long/valueOf (get build "number")))
+
+(defn build-pull-request-number [build]
+  (get build "pull_request_number"))
 
 (defn build-jobs! [build]
-  (let [jobs (get build "jobs"
-                  (get build "matrix"))]
-    (map (comp job! #(get % "id")) jobs)))
+  (map job! (get build "job_ids")))
 
-(defn build-author! [build]
-  (let [url (get-in build ["commit" "compare_url"]
-                    (get build "compare_url"))
-        url (.split url "/")
-        owner (get url 3)
-        repo (get url 4)
-        number (Integer. (get url 6))]
-    (github/pull-request-author! owner repo number)))
+(defn job-log! [job]
+  (get (travis-api! {} "logs" (get job "log_id")) "log"))
+
+(defn log-body [log]
+  (let [b (get log "body")]
+    (when (not (empty? b))
+      b)))
+
+(defn repo-builds!
+  ([repo]
+     (loop [builds []
+            smallest-number Long/MAX_VALUE]
+       (let [chunk (repo-builds! repo smallest-number)]
+         (if (empty? chunk)
+           builds
+           (recur (concat builds chunk)
+                  (apply min (map build-number chunk)))))))
+  ([repo after]
+     (filter #(get % "pull_request")
+             (get (travis-api! {"repository_id" (repo-id repo)
+                                "after_number" after}
+                               "builds")
+                  "builds"))))
