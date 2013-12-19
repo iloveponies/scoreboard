@@ -33,16 +33,10 @@
                   prs)
            prs)))))
 
-(defn pull-request-number [pull-request]
-  (:number pull-request))
-
-(defn pull-request-author [pull-request]
-  (get-in pull-request [:user :login]))
-
 (defn update-author-cache! [cache owner repo]
   (doseq [pull-request (pull-requests! owner repo)
-          :let [n (pull-request-number pull-request)
-                author (pull-request-author pull-request)]]
+          :let [n (:number pull-request)
+                author (get-in pull-request [:user :login])]]
     (swap! cache assoc [owner repo n] author)))
 
 (let [cache (atom {})]
