@@ -46,7 +46,7 @@
     (swap! cache assoc [owner repo n] author)))
 
 (let [cache (atom {})]
-  (defn pull-request-author! [owner repo number]
+  (defn pull-request-author [owner repo number]
     (if-let [author (get @cache [owner repo number])]
       author
       (do (update-author-cache! cache owner repo)
