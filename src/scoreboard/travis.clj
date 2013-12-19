@@ -8,73 +8,66 @@
   (rate/rate-limit
    (fn [method url parameters]
      (util/try-times 5
-                     (fn [] (method url {:query-params parameters
-                                         :headers {"Accept" "application/json; version=2"}}))))
+                     #(method url {:query-params parameters
+                                   :headers {"Accept" "application/json; version=2"}})))
    5000 (* 1000 60 60)))
 
-(defn travis-api! [parameters & url-fragments]
+(defn api! [parameters & url-fragments]
   (let [url (apply str "https://api.travis-ci.org/"
                    (interpose "/" url-fragments))]
-    (json/read-str (:body (raw-call! http/get
-                                     url
-                                     parameters)))))
+    (:body (raw-call! http/get url parameters))))
 
-(defn repo!
-  ([repo-id]
-     (get (travis-api! {} "repos" repo-id) "repo"))
-  ([owner repo]
-     (get (travis-api! {} "repos" owner repo) "repo")))
+(defn json-api! [parameters & url-fragments]
+  (json/read-str (apply api! parameters url-fragments)
+                 :key-fn keyword))
 
-(defn job! [job-id]
-  (get (travis-api! {} "jobs" job-id) "job"))
 
-(defn job-id [job]
-  (get job "id"))
 
-(defn repo-id [repo]
-  (get repo "id"))
+(defn parse-build [build]
+  (-> build
+      (update-in [:number] #(Long/valueOf %))
+      (clojure.set/rename-keys {:pull_request :pull-request
+                                :pull_request_number :pull-request-number})))
 
-(defn repo-owner [repo]
-  (first (.split (get repo "slug") "/")))
+(defn build [id]
+  (parse-build (:build (json-api! {} "builds" id))))
 
-(defn repo-name [repo]
-  (second (.split (get repo "slug") "/")))
+(defn parse-repo [repo]
+  (let [[owner name] (.split (:slug repo) "/")]
+    (-> repo
+        (dissoc :slug)
+        (assoc :owner owner)
+        (assoc :name name)
+        (clojure.set/rename-keys
+         {:pull_request_number :pull-request-number}))))
 
-(defn build-repo! [build]
-  (repo! (get build "repository_id")))
+(defn repo
+  ([id] (parse-repo (:repo (json-api! {} "repos" id))))
+  ([owner repo] (parse-repo (:repo (json-api! {} "repos" owner repo)))))
 
-(defn build-number [build]
-  (Long/valueOf (get build "number")))
-
-(defn build-pull-request-number [build]
-  (get build "pull_request_number"))
-
-(defn build-jobs! [build]
-  (map job! (get build "job_ids")))
-
-(defn job-log! [job]
-  (get (travis-api! {} "logs" (get job "log_id")) "log"))
-
-(defn log-body [log]
-  (let [b (get log "body")]
-    (when (not (empty? b))
-      b)))
-
-(defn repo-builds!
+(defn repo-builds
   ([repo]
      (loop [builds []
-            smallest-number Long/MAX_VALUE]
-       (let [chunk (repo-builds! repo smallest-number)]
-         (if (empty? chunk)
-           builds
-           (recur (concat builds chunk)
-                  (apply min (map build-number chunk)))))))
+            chunk (repo-builds repo Long/MAX_VALUE)]
+       (if (empty? chunk)
+         builds
+         (recur (concat builds chunk)
+                (repo-builds repo (apply min (map :number chunk)))))))
   ([repo after]
-     (filter #(get % "pull_request")
-             (get (travis-api! {"repository_id" (repo-id repo)
-                                "after_number" after}
-                               "builds")
-                  "builds"))))
+     (map parse-build
+          (:builds (json-api! {"repository_id" (:id repo)
+                               "after_number" after}
+                              "builds")))))
 
-(defn parse-notification [payload-str]
-  (json/read-str payload-str))
+(defn log [job-id]
+  (api! {} "jobs" job-id "log"))
+
+(defn build-logs [build]
+  (for [job-id (:job_ids build)]
+    (log job-id)))
+
+(defn build-repo [build]
+  (repo (:repository_id build)))
+
+(defn notification-build [request]
+  (build (:id (json/read-str (:payload (:body request)) :key-fn keyword))))

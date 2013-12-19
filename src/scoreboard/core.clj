@@ -13,44 +13,44 @@
             [scoreboard.github :as github]
             [scoreboard.travis :as travis]))
 
-(defn grading-data [job]
-  (if-let [log (travis/log-body (travis/job-log! job))]
-    (if-let [data (second (.split log "midje-grader:data"))]
-      (json/read-str data))
-    (println "log missing from job" (travis/job-id job))))
+(defn score-to-scoreboard [scoreboard repo author score]
+  (scoreboard/add-score scoreboard
+                        (scoreboard/->score
+                         :user author
+                         :repo repo
+                         :exercise (:exercise score)
+                         :points (:points score)
+                         :max-points (:max-points score))))
 
-(defn job-to-scoreboard [scoreboard repo job author]
-  (reduce (fn [scoreboard points]
-            (scoreboard/add-score
-             scoreboard
-             (scoreboard/->score
-              :user author
-              :repo repo
-              :exercise (get points "exercise")
-              :points (get points "got")
-              :max-points (get points "out-of"))))
-          scoreboard
-          (grading-data job)))
+(defn parse-scores [log]
+  (if-let [data (second (.split log "midje-grader:data"))]
+    (for [score (json/read-str data :key-fn keyword)]
+      (clojure.set/rename-keys score {:got :points
+                                      :out-of :max-points}))
+    (println "data missing from log")))
 
-(defn update-scoreboard! [scoreboard request]
-  (let [build (travis/parse-notification (:payload (:params request)))
-        repo (travis/build-repo! build)
-        owner (travis/repo-owner repo)
-        name (travis/repo-name repo)
-        number (travis/build-pull-request-number build)
-        author (github/pull-request-author! owner name number)]
-    (doseq [job (travis/build-jobs! build)]
-      (send scoreboard job-to-scoreboard name job author))))
+(defn handle-build
+  ([scoreboard build]
+     (handle-build scoreboard (travis/build-repo build) build))
+  ([scoreboard repo build]
+     (let [owner (:owner repo)
+           name (:name repo)
+           number (:pull-request-number build)
+           author (github/pull-request-author owner name number)]
+       (doseq [log (travis/build-logs build)
+               score (parse-scores log)]
+         (send scoreboard score-to-scoreboard name author score)))))
 
-(defn repo-to-scoreboard! [scoreboard owner name]
-  (let [repo (travis/repo! owner name)
-        owner (travis/repo-owner repo)
-        name (travis/repo-name repo)]
-    (doseq [build (travis/repo-builds! repo)
-            :let [number (travis/build-pull-request-number build)
-                  author (github/pull-request-author! owner name number)]
-            job (travis/build-jobs! build)]
-      (send scoreboard job-to-scoreboard name job author))))
+(defn handle-repository [scoreboard owner name]
+  (let [repo (travis/repo owner name)]
+    (doseq [build (travis/repo-builds repo)
+            :when (:pull-request build)]
+      (handle-build scoreboard repo build))))
+
+(defn handle-notification [scoreboard request]
+  (let [build (travis/notification-build request)]
+    (when (:pull-request build)
+      (handle-build scoreboard build))))
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 
@@ -72,10 +72,20 @@
   (GET "/notifications" []
        (r/response (str (:payload (:params @notif)))))
   (POST "/notifications" request
-        (do (update-scoreboard! scoreboard request)
+        (do (handle-notification scoreboard request)
             (swap! notif (constantly request))
             (r/response "ok")))
   (route/not-found "not found"))
+
+(def chapters ["training-day"
+               "i-am-a-horse-in-the-land-of-booleans"
+               "structured-data"
+               "p-p-p-pokerface"
+               "predicates"
+               "recursion"
+               "looping-is-recursion"
+               "one-function-to-rule-them-all"
+               "sudoku"])
 
 (defn -main [port]
   (let [handler (-> routes
@@ -83,15 +93,7 @@
                     wrap-params
                     (wrap-cors :access-control-allow-origin #".*"))]
     (server/run-jetty handler {:port (Integer. port) :join? false})
-    (doseq [repo ["training-day"
-                  "i-am-a-horse-in-the-land-of-booleans"
-                  "structured-data"
-                  "p-p-p-pokerface"
-                  "predicates"
-                  "recursion"
-                  "looping-is-recursion"
-                  "one-function-to-rule-them-all"
-                  "sudoku"]]
-      (println "populating" repo)
-      (repo-to-scoreboard! scoreboard "iloveponies" repo)
+    (doseq [chapter chapters]
+      (println "populating" chapter)
+      (handle-repository scoreboard "iloveponies" chapter)
       (println "done"))))
