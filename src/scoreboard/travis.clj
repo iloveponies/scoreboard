@@ -70,4 +70,4 @@
   (repo (:repository_id build)))
 
 (defn notification-build [request]
-  (build (:id (json/read-str (:payload (:body request)) :key-fn keyword))))
+  (build (:id (json/read-str (:payload (:params request)) :key-fn keyword))))
