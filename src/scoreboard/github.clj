@@ -4,11 +4,14 @@
             [rate-gate.core :as rate]
             [scoreboard.util :as util]))
 
+(def *user* (System/getenv "GITHUB_USER"))
+(def *passwd* (System/getenv "GITHUB_PASSWD"))
+
 (def raw-call!
   (rate/rate-limit
    (fn [method url parameters]
-     (let [user (System/getenv "GITHUB_USER")
-           passwd (System/getenv "GITHUB_PASSWD")]
+     (let [user *user*
+           passwd *passwd*]
        (util/try-times 5 (fn [] (method url {:query-params parameters
                                              :basic-auth [user passwd]})))))
    5000 (* 1000 60 60)))
