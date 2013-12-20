@@ -70,10 +70,10 @@
          (-> (r/response (json/write-str scores))
              (r/content-type "application/json"))))
   (GET "/notifications" []
-       (r/response (str (:payload (:params @notif)))))
+       (r/response (str @notif)))
   (POST "/notifications" request
-        (do (handle-notification scoreboard request)
-            (swap! notif (constantly request))
+        (do (swap! notif (constantly request))
+            (handle-notification scoreboard request)
             (r/response "ok")))
   (route/not-found "not found"))
 
