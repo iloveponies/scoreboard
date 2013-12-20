@@ -29,28 +29,25 @@
                                       :out-of :max-points}))
     (println "data missing from log")))
 
-(defn handle-build
-  ([scoreboard build]
-     (handle-build scoreboard (travis/build-repo build) build))
-  ([scoreboard repo build]
-     (let [owner (:owner repo)
-           name (:name repo)
-           number (:pull-request-number build)
-           author (github/pull-request-author owner name number)]
-       (doseq [log (travis/build-logs build)
-               score (parse-scores log)]
-         (send scoreboard score-to-scoreboard name author score)))))
+(defn handle-build [scoreboard repo build]
+  (let [owner (:owner repo)
+        name (:name repo)
+        number (:pull-request-number build)
+        author (github/pull-request-author owner name number)]
+    (doseq [log (travis/build-logs build)
+            score (parse-scores log)]
+      (send scoreboard score-to-scoreboard name author score))))
 
 (defn handle-repository [scoreboard owner name]
-  (let [repo (travis/repo owner name)]
-    (doseq [build (travis/repo-builds repo)
+  (let [repository (travis/repository owner name)]
+    (doseq [build (travis/repository-builds repository)
             :when (:pull-request build)]
-      (handle-build scoreboard repo build))))
+      (handle-build scoreboard repository build))))
 
 (defn handle-notification [scoreboard request]
-  (let [build (travis/notification-build request)]
+  (let [{:keys [build repository]} (travis/notification-build request)]
     (when (:pull-request build)
-      (handle-build scoreboard build))))
+      (handle-build scoreboard repository build))))
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 

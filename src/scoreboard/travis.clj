@@ -24,38 +24,55 @@
 
 
 (defn parse-build [build]
-  (-> build
-      (update-in [:number] #(Long/valueOf %))
-      (clojure.set/rename-keys {:pull_request :pull-request
-                                :pull_request_number :pull-request-number})))
+  (let [pull-request (or (= (:type build) "pull_request")
+                         (:pull_request build))
+        pull-request-n (if (contains? build :pull_request_number)
+                         (:pull_request_number build)
+                         (-> (:compare_url build)
+                             (.split "/")
+                             last
+                             Long/valueOf))]
+    (-> build
+        (update-in [:number] #(Long/valueOf %))
+        (update-in [:matrix] #(map :id %))
+        (dissoc :type)
+        (dissoc :pull_request)
+        (assoc :pull-request pull-request)
+        (dissoc :pull_request_number)
+        (assoc :pull-request-number pull-request-n)
+        (clojure.set/rename-keys {:matrix :job-ids
+                                  :job_ids :job-ids
+                                  :repository_id :repository-id}))))
 
 (defn build [id]
   (parse-build (:build (json-api! {} "builds" id))))
 
-(defn parse-repo [repo]
-  (let [[owner name] (.split (:slug repo) "/")]
-    (-> repo
+(defn parse-repository [repository]
+  (let [[owner name] (if (contains? repository :slug)
+                       (.split (:slug repository) "/")
+                       [(:owner_name repository) (:name repository)])]
+    (-> repository
         (dissoc :slug)
+        (dissoc :owner_name)
         (assoc :owner owner)
-        (assoc :name name)
-        (clojure.set/rename-keys
-         {:pull_request_number :pull-request-number}))))
+        (assoc :name name))))
 
-(defn repo
-  ([id] (parse-repo (:repo (json-api! {} "repos" id))))
-  ([owner repo] (parse-repo (:repo (json-api! {} "repos" owner repo)))))
+(defn repository
+  ([id] (parse-repository (:repo (json-api! {} "repos" id))))
+  ([owner name] (parse-repository (:repo (json-api! {} "repos" owner name)))))
 
-(defn repo-builds
-  ([repo]
+(defn repository-builds
+  ([repository]
      (loop [builds []
-            chunk (repo-builds repo Long/MAX_VALUE)]
+            chunk (repository-builds repository Long/MAX_VALUE)]
        (if (empty? chunk)
          builds
          (recur (concat builds chunk)
-                (repo-builds repo (apply min (map :number chunk)))))))
-  ([repo after]
+                (repository-builds repository
+                                   (apply min (map :number chunk)))))))
+  ([repository after]
      (map parse-build
-          (:builds (json-api! {"repository_id" (:id repo)
+          (:builds (json-api! {"repository_id" (:id repository)
                                "after_number" after}
                               "builds")))))
 
@@ -63,11 +80,15 @@
   (api! {} "jobs" job-id "log"))
 
 (defn build-logs [build]
-  (for [job-id (:job_ids build)]
+  (for [job-id (:job-ids build)]
     (log job-id)))
 
-(defn build-repo [build]
-  (repo (:repository_id build)))
+(defn build-repository [build]
+  (repository (:repository-id build)))
 
 (defn notification-build [request]
-  (build (:id (json/read-str (:payload (:params request)) :key-fn keyword))))
+  (let [build (parse-build (json/read-str (:payload (:params request))
+                                          :key-fn keyword))
+        repository (parse-repository (:repository build))]
+    {:build build
+     :repository repository}))
