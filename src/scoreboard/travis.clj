@@ -72,8 +72,10 @@
                                    (apply min (map :number chunk)))))))
   ([repository after]
      (map parse-build
-          (:builds (json-api! {"repository_id" (:id repository)
-                               "after_number" after}
+          (:builds (json-api! {"after_number" after}
+                              "repos"
+                              (:owner repository)
+                              (:name repository)
                               "builds")))))
 
 (defn log [job-id]
