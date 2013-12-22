@@ -4,24 +4,22 @@
             [rate-gate.core :as rate]
             [scoreboard.util :as util]))
 
-(def raw-call!
+(def http
   (rate/rate-limit
    (fn [method url parameters]
-     (util/try-times 5
-                     #(method url {:query-params parameters
-                                   :headers {"Accept" "application/json; version=2"}})))
+     (let [p {:query-params parameters
+              :headers {"Accept" "application/json; version=2"}}]
+       (util/retrying-http method url p [1 2 8])))
    5000 (* 1000 60 60)))
 
-(defn api! [parameters & url-fragments]
+(defn api [parameters & url-fragments]
   (let [url (apply str "https://api.travis-ci.org/"
                    (interpose "/" url-fragments))]
-    (:body (raw-call! http/get url parameters))))
+    (:body (http :get url parameters))))
 
-(defn json-api! [parameters & url-fragments]
-  (json/read-str (apply api! parameters url-fragments)
+(defn json-api [parameters & url-fragments]
+  (json/read-str (apply api parameters url-fragments)
                  :key-fn keyword))
-
-
 
 (defn parse-build [build]
   (let [pull-request (or (= (:type build) "pull_request")
@@ -45,7 +43,7 @@
                                   :repository_id :repository-id}))))
 
 (defn build [id]
-  (parse-build (:build (json-api! {} "builds" id))))
+  (parse-build (:build (json-api {} "builds" id))))
 
 (defn parse-repository [repository]
   (let [[owner name] (if (contains? repository :slug)
@@ -58,8 +56,8 @@
         (assoc :name name))))
 
 (defn repository
-  ([id] (parse-repository (:repo (json-api! {} "repos" id))))
-  ([owner name] (parse-repository (:repo (json-api! {} "repos" owner name)))))
+  ([id] (parse-repository (:repo (json-api {} "repos" id))))
+  ([owner name] (parse-repository (:repo (json-api {} "repos" owner name)))))
 
 (defn repository-builds
   ([repository]
@@ -72,14 +70,14 @@
                                    (apply min (map :number chunk)))))))
   ([repository after]
      (map parse-build
-          (:builds (json-api! {"after_number" after}
-                              "repos"
-                              (:owner repository)
-                              (:name repository)
-                              "builds")))))
+          (:builds (json-api {"after_number" after}
+                             "repos"
+                             (:owner repository)
+                             (:name repository)
+                             "builds")))))
 
 (defn log [job-id]
-  (api! {} "jobs" job-id "log"))
+  (api {} "jobs" job-id "log"))
 
 (defn build-logs [build]
   (for [job-id (:job-ids build)]

@@ -1,47 +1,61 @@
 (ns scoreboard.github
-  (:require [clj-http.client :as http]
-            [clojure.data.json :as json]
+  (:require [clojure.data.json :as json]
             [rate-gate.core :as rate]
             [scoreboard.util :as util]))
 
 (def ^{:dynamic true} *user* (System/getenv "GITHUB_USER"))
 (def ^{:dynamic true} *passwd* (System/getenv "GITHUB_PASSWD"))
 
-(def raw-call!
+(def http
   (rate/rate-limit
    (fn [method url parameters]
-     (util/try-times 5 #(method url {:query-params parameters
-                                     :basic-auth [*user* *passwd*]})))
+     (let [p {:query-params parameters
+              :basic-auth [*user* *passwd*]}]
+       (util/retrying-http method url p [1 2 8])))
    5000 (* 1000 60 60)))
 
-(defn api! [parameters & url-fragments]
+(defn api [parameters & url-fragments]
   (let [url (apply str "https://api.github.com/"
                    (interpose "/" url-fragments))]
-    (raw-call! http/get url parameters)))
+    (http :get url parameters)))
 
-(defn pull-requests!
+(defn pull-request [owner repo number]
+  (json/read-str (:build (api {} "repos" owner repo "pulls" number))
+                 :key-fn keyword))
+
+(defn pull-requests
   ([owner repo]
-     (concat (pull-requests! owner repo "open")
-             (pull-requests! owner repo "closed")))
+     (concat (pull-requests owner repo "open")
+             (pull-requests owner repo "closed")))
   ([owner repo state]
-     (loop [{:keys [links body]}
-            (api! {"state" state} "repos" owner repo "pulls")
-            prs []]
-       (let [prs (concat prs (json/read-str body :key-fn keyword))]
-         (if (contains? links :next)
-           (recur (raw-call! http/get (:href (:next links)) {"state" state})
-                  prs)
-           prs)))))
+     (let [p {"state" state
+              "per_page" 100}]
+       (loop [{:keys [links body]} (api p "repos" owner repo "pulls")
+              prs []]
+         (let [prs (concat prs (json/read-str body :key-fn keyword))]
+           (if (contains? links :next)
+             (recur (http :get (:href (:next links)) p)
+                    prs)
+             prs))))))
 
-(defn update-author-cache! [cache owner repo]
-  (doseq [pull-request (pull-requests! owner repo)
-          :let [n (:number pull-request)
-                author (get-in pull-request [:user :login])]]
-    (swap! cache assoc [owner repo n] author)))
+(defn pr-author [pull-request]
+  (get-in pull-request [:head :repo :owner :login]))
+
+(defn update-cache [cache pull-request]
+  (let [owner (get-in pull-request [:base :repo :owner :login])
+        name (get-in pull-request [:base :repo :name])
+        number (:number pull-request)
+        author (pr-author pull-request)]
+    (assoc cache [owner name number] author)))
 
 (let [cache (atom {})]
+  (defn preheat-cache [owner repo]
+    (doseq [pr (pull-requests owner repo)]
+      (swap! cache update-cache pr)))
+
   (defn pull-request-author [owner repo number]
     (if-let [author (get @cache [owner repo number])]
       author
-      (do (update-author-cache! cache owner repo)
-          (get @cache [owner repo number])))))
+      (let [pr (pull-request owner repo number)]
+        (swap! cache update-cache pr)
+        (pr-author pr)))))

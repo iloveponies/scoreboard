@@ -22,7 +22,7 @@
                          :points (:points score)
                          :max-points (:max-points score))))
 
-(defn parse-scores [log]
+(defn parse-scores [^String log]
   (if-let [data (second (.split log "midje-grader:data"))]
     (for [score (json/read-str data :key-fn keyword)]
       (clojure.set/rename-keys score {:got :points
@@ -91,6 +91,9 @@
                     (wrap-cors :access-control-allow-origin #".*"))]
     (server/run-jetty handler {:port (Integer. port) :join? false})
     (doseq [chapter chapters]
+      (println "preheating author cache," chapter)
+      (github/preheat-cache "iloveponies" chapter))
+    (doseq [chapter chapters]
       (println "populating" chapter)
-      (handle-repository scoreboard "iloveponies" chapter)
-      (println "done"))))
+      (handle-repository scoreboard "iloveponies" chapter))
+    (println "scoreboard populated")))

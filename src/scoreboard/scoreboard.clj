@@ -1,4 +1,5 @@
-(ns scoreboard.scoreboard)
+(ns scoreboard.scoreboard
+  (:require [clojure.set]))
 
 (defn ->score [& {:keys [user repo exercise points max-points] :as s}]
   s)
