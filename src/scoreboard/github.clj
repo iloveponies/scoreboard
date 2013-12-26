@@ -19,9 +19,12 @@
                    (interpose "/" url-fragments))]
     (http :get url parameters)))
 
-(defn pull-request [owner repo number]
-  (json/read-str (:build (api {} "repos" owner repo "pulls" number))
+(defn json-api [parameters & url-fragments]
+  (json/read-str (:body (apply api parameters url-fragments))
                  :key-fn keyword))
+
+(defn pull-request [owner repo number]
+  (json-api {} "repos" owner repo "pulls" number))
 
 (defn pull-requests
   ([owner repo]
