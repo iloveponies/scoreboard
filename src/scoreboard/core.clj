@@ -22,12 +22,12 @@
                          :points (:points score)
                          :max-points (:max-points score))))
 
-(defn parse-scores [^String log]
+(defn parse-scores [^String log on-error]
   (if-let [data (second (.split log "midje-grader:data"))]
     (for [score (json/read-str data :key-fn keyword)]
       (clojure.set/rename-keys score {:got :points
                                       :out-of :max-points}))
-    (println "data missing from log")))
+    (on-error)))
 
 (defn handle-build [scoreboard repo build]
   (let [owner (:owner repo)
@@ -35,7 +35,8 @@
         number (:pull-request-number build)
         author (github/pull-request-author owner name number)]
     (doseq [log (travis/build-logs build)
-            score (parse-scores log)]
+            score (parse-scores log #(println "data missing from build"
+                                              (:id build)))]
       (send scoreboard score-to-scoreboard name author score))))
 
 (defn handle-repository [scoreboard owner name]
@@ -67,9 +68,9 @@
          (-> (r/response (json/write-str scores))
              (r/content-type "application/json"))))
   (GET "/notifications" []
-       (r/response (str @notif)))
+       (r/response @notif))
   (POST "/notifications" request
-        (do (swap! notif (constantly request))
+        (do (swap! notif (constantly (:payload (:params request))))
             (handle-notification scoreboard request)
             (r/response "ok")))
   (route/not-found "not found"))
