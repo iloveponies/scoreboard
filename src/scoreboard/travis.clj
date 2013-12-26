@@ -1,6 +1,5 @@
 (ns scoreboard.travis
-  (:require [clj-http.client :as http]
-            [clojure.data.json :as json]
+  (:require [clojure.data.json :as json]
             [rate-gate.core :as rate]
             [scoreboard.util :as util]))
 
@@ -15,10 +14,10 @@
 (defn api [parameters & url-fragments]
   (let [url (apply str "https://api.travis-ci.org/"
                    (interpose "/" url-fragments))]
-    (:body (http :get url parameters))))
+    (http :get url parameters)))
 
 (defn json-api [parameters & url-fragments]
-  (json/read-str (apply api parameters url-fragments)
+  (json/read-str (:body (apply api parameters url-fragments))
                  :key-fn keyword))
 
 (defn parse-build [build]
@@ -77,7 +76,7 @@
                              "builds")))))
 
 (defn log [job-id]
-  (api {} "jobs" job-id "log"))
+  (:body (api {} "jobs" job-id "log")))
 
 (defn build-logs [build]
   (for [job-id (:job-ids build)]
