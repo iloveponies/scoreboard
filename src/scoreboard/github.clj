@@ -41,14 +41,11 @@
                     prs)
              prs))))))
 
-(defn pr-author [pull-request]
-  (get-in pull-request [:head :repo :owner :login]))
-
 (defn update-cache [cache pull-request]
   (let [owner (get-in pull-request [:base :repo :owner :login])
         name (get-in pull-request [:base :repo :name])
         number (:number pull-request)
-        author (pr-author pull-request)]
+        author (get-in pull-request [:head :repo :owner :login])]
     (assoc cache [owner name number] author)))
 
 (let [cache (atom {})]
@@ -56,9 +53,13 @@
     (doseq [pr (pull-requests owner repo)]
       (swap! cache update-cache pr)))
 
+  (defn clear-cache []
+    (reset! cache {}))
+
   (defn pull-request-author [owner repo number]
     (if-let [author (get @cache [owner repo number])]
       author
-      (let [pr (pull-request owner repo number)]
+      (let [pr (pull-request owner repo number)
+            author (get-in pr [:head :repo :owner :login])]
         (swap! cache update-cache pr)
-        (pr-author pr)))))
+        author))))
