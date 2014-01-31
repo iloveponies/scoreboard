@@ -100,4 +100,5 @@
     (doseq [chapter chapters]
       (println "populating" chapter)
       (handle-repository scoreboard "iloveponies" chapter))
+    (github/clear-cache)
     (println "scoreboard populated")))
