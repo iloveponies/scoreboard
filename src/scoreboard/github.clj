@@ -45,7 +45,7 @@
   (let [owner (get-in pull-request [:base :repo :owner :login])
         name (get-in pull-request [:base :repo :name])
         number (:number pull-request)
-        author (get-in pull-request [:head :repo :owner :login])]
+        author (get-in pull-request [:head :user :login])]
     (assoc cache [owner name number] author)))
 
 (let [cache (atom {})]
@@ -60,6 +60,6 @@
     (if-let [author (get @cache [owner repo number])]
       author
       (let [pr (pull-request owner repo number)
-            author (get-in pr [:head :repo :owner :login])]
+            author (get-in pr [:head :user :login])]
         (swap! cache update-cache pr)
         author))))
