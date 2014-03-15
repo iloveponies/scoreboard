@@ -1,5 +1,20 @@
 (ns scoreboard.scoreboard
-  (:require [clojure.set]))
+  (:require [clojure.set])
+  (:require [scoreboard.score :as score]
+            [scoreboard.problem :as problem]))
+
+(defn ->Board
+  ([{:keys [name]}]
+     (board/->Board name nil))
+  ([board {:keys [name]}]
+     (board/->Board name (:key board))))
+
+(defn ->Problem [board {:keys [name max-points]}]
+  (problem/->Problem name max-points (:key board)))
+
+(defn ->Score [problem {:keys [user points time]}]
+  (when (<= points (:max-points (:value problem)))
+    (score/->Score user points time (:key problem))))
 
 (defn ->score [& {:keys [user repo exercise points max-points] :as s}]
   s)
