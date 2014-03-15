@@ -1,5 +1,6 @@
 (ns scoreboard.board)
 
-(defprotocol BoardStore)
+(defprotocol Store
+  (insert! [store board]))
 
 (defrecord Board [name parent-key])

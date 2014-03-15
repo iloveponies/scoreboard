@@ -1,5 +1,6 @@
 (ns scoreboard.problem)
 
-(defprotocol ProblemStore)
+(defprotocol Store
+  (insert! [store problem]))
 
 (defrecord Problem [name max-points board-key])
