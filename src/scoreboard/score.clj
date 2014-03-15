@@ -1,5 +1,6 @@
 (ns scoreboard.score)
 
-(defprotocol ScoreStore)
+(defprotocol Store
+  (insert! [store score]))
 
 (defrecord Score [user points time problem-key])
