@@ -36,11 +36,11 @@
 
 (defn handle-build [store repo build]
   (let [chapter (:name repo)
-        author (github/pull-request-author "iloveponies"
-                                           chapter
-                                           (:pull-request-number build))
-        scores (mapcat parse-log (travis/build-logs build))]
-    (persist-scores store chapter author scores)))
+        pr-number (:pull-request-number build)
+        scores (mapcat parse-log (travis/build-logs build))
+        author (github/pull-request-author "iloveponies" chapter pr-number)]
+    (when author
+      (persist-scores store chapter author scores))))
 
 (defn handle-repository [store owner name]
   (let [repository (travis/repository owner name)]
