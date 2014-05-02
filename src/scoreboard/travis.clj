@@ -16,30 +16,34 @@
                    (interpose "/" url-fragments))]
     (http :get url parameters)))
 
+(defn parse-json [s]
+  (json/read-str s :key-fn #(keyword (.replace % "_" "-"))))
+
 (defn json-api [parameters & url-fragments]
-  (json/read-str (:body (apply api parameters url-fragments))
-                 :key-fn keyword))
+  (parse-json (:body (apply api parameters url-fragments))))
 
 (defn parse-build [build]
-  (let [pull-request (or (= (:type build) "pull_request")
-                         (:pull_request build))
-        pull-request-n (if (contains? build :pull_request_number)
-                         (:pull_request_number build)
-                         (-> (:compare_url build)
-                             (.split "/")
-                             last
-                             Long/valueOf))]
+  (let [pr (fn [build]
+             (if (not (contains? build :pull-request))
+               (assoc build :pull-request (= (:type build) "pull_request"))
+               build))
+        pr-number (fn [build]
+                    (if (not (contains? build :pull-request-number))
+                      (assoc build
+                        :pull-request-number (-> (:compare-url build)
+                                                 (.split "/")
+                                                 last
+                                                 Long/valueOf))
+                      build))
+        job-ids (fn [build]
+                  (if (not (contains? build :job-ids))
+                    (assoc build :job-ids (map :id (:matrix build)))
+                    build))]
     (-> build
-        (update-in [:number] #(Long/valueOf %))
-        (update-in [:matrix] #(map :id %))
-        (dissoc :type)
-        (dissoc :pull_request)
-        (assoc :pull-request pull-request)
-        (dissoc :pull_request_number)
-        (assoc :pull-request-number pull-request-n)
-        (clojure.set/rename-keys {:matrix :job-ids
-                                  :job_ids :job-ids
-                                  :repository_id :repository-id}))))
+        pr
+        pr-number
+        job-ids
+        (update-in [:number] #(Long/valueOf %)))))
 
 (defn build [id]
   (parse-build (:build (json-api {} "builds" id))))
@@ -47,10 +51,10 @@
 (defn parse-repository [repository]
   (let [[owner name] (if (contains? repository :slug)
                        (.split (:slug repository) "/")
-                       [(:owner_name repository) (:name repository)])]
+                       [(:owner-name repository) (:name repository)])]
     (-> repository
         (dissoc :slug)
-        (dissoc :owner_name)
+        (dissoc :owner-name)
         (assoc :owner owner)
         (assoc :name name))))
 
@@ -86,8 +90,7 @@
   (repository (:repository-id build)))
 
 (defn notification-build [request]
-  (let [build (parse-build (json/read-str (:payload (:params request))
-                                          :key-fn keyword))
+  (let [build (parse-build (parse-json (:payload (:params request))))
         repository (parse-repository (:repository build))]
     {:build build
      :repository repository}))
