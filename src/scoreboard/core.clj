@@ -8,7 +8,7 @@
             [ring.util.response :as r]
             [compojure.handler :as handler]
             [compojure.route :as route]
-            [clojure.data.json :as json])
+            [cheshire.core :as json])
   (:require [scoreboard.board :as board]
             [scoreboard.score :as score]
             [scoreboard.problem :as problem]
@@ -18,10 +18,10 @@
 
 (defn parse-log [log]
   (for [score (try (some-> (second (.split log "midje-grader:data"))
-                           (json/read-str :key-fn keyword))
+                           (json/parse-string true))
                    (catch Exception e))]
     {:exercise (str (:exercise score))
-     :points (get score :points (:got score))}))
+     :points (get score :points (get score :got))}))
 
 (defn persist-scores [store chapter author scores]
   (dosync
@@ -39,7 +39,7 @@
         pr-number (:pull-request-number build)
         scores (mapcat parse-log (travis/build-logs build))
         author (github/pull-request-author "iloveponies" chapter pr-number)]
-    (when author
+    (when (and (not-empty scores) (some? author))
       (persist-scores store chapter author scores))))
 
 (defn handle-repository [store owner name]
@@ -60,13 +60,13 @@
 (defroutes routes
   (GET "/scoreboard" []
        (let [scores (dosync (board/total! scoreboard "iloveponies" nil))]
-         (-> (r/response (json/write-str scores))
+         (-> (r/response (json/generate-string scores {:pretty true}))
              (r/content-type "application/json"))))
   (GET "/scoreboard/:repo" [repo]
        (let [scores (dosync
                      (let [ilp (board/get! scoreboard "iloveponies" nil)]
                        (board/total! scoreboard repo (:key ilp))))]
-         (-> (r/response (json/write-str scores))
+         (-> (r/response (json/generate-string scores {:pretty true}))
              (r/content-type "application/json"))))
   (GET "/notifications" []
        (r/response @notif))
@@ -117,6 +117,6 @@
       (println "preheating author cache," chapter)
       (github/preheat-cache "iloveponies" chapter)
       (println "populating" chapter)
-      (handle-repository scoreboard "iloveponies" chapter))
-    (println "scoreboard populated")
-    (github/clear-cache)))
+      (handle-repository scoreboard "iloveponies" chapter)
+      (github/clear-cache))
+    (println "scoreboard populated")))

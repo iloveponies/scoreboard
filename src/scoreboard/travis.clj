@@ -1,23 +1,21 @@
 (ns scoreboard.travis
-  (:require [clojure.data.json :as json]
+  (:require [cheshire.core :as json]
+            [clj-http.client :as http]
             [rate-gate.core :as rate]
             [scoreboard.util :as util]))
 
-(def http
-  (rate/rate-limit
-   (fn [method url parameters]
-     (let [p {:query-params parameters
-              :headers {"Accept" "application/json; version=2"}}]
-       (util/retrying-http method url p [1 2 8])))
-   5000 (* 1000 60 60)))
-
-(defn api [parameters & url-fragments]
-  (let [url (apply str "https://api.travis-ci.org/"
-                   (interpose "/" url-fragments))]
-    (http :get url parameters)))
+(def api
+  (-> (fn [parameters & url-fragments]
+        (let [p {:query-params parameters
+                 :headers {"Accept" "application/json; version=2"}}
+              url (apply str "https://api.travis-ci.org/"
+                         (interpose "/" url-fragments))]
+          (http/get url (merge parameters p))))
+      (rate/rate-limit 5000 (* 1000 60 60))
+      (util/retrying [500 1000 2000])))
 
 (defn parse-json [s]
-  (json/read-str s :key-fn #(keyword (.replace % "_" "-"))))
+  (json/parse-string s #(keyword (.replace % "_" "-"))))
 
 (defn json-api [parameters & url-fragments]
   (parse-json (:body (apply api parameters url-fragments))))
