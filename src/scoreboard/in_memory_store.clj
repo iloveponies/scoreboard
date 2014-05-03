@@ -1,4 +1,5 @@
 (ns scoreboard.in-memory-store
+  (:require clojure.set)
   (:require [scoreboard.board :as board]
             [scoreboard.problem :as problem]
             [scoreboard.score :as score]))
