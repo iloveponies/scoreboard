@@ -3,7 +3,7 @@
   :url "http://github.com/iloveponies/scoreboard"
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [tentacles "0.2.5"]
-                 [org.clojure/data.json "0.2.3"]
+                 [cheshire "5.3.1"]
                  [rate-gate "1.3.1"]
                  [ring/ring-core "1.2.1"]
                  [ring/ring-devel "1.2.1"]

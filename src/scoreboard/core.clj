@@ -8,7 +8,7 @@
             [ring.util.response :as r]
             [compojure.handler :as handler]
             [compojure.route :as route]
-            [clojure.data.json :as json])
+            [cheshire.core :as json])
   (:require [scoreboard.scoreboard :as scoreboard]
             [scoreboard.github :as github]
             [scoreboard.travis :as travis]))
@@ -24,7 +24,7 @@
 
 (defn parse-scores [^String log on-error]
   (if-let [data (second (.split log "midje-grader:data"))]
-    (for [score (try (json/read-str data :key-fn keyword)
+    (for [score (try (json/parse-string data keyword)
                      (catch Exception e
                        (println data)
                        (throw e)))]
@@ -32,10 +32,8 @@
                                       :out-of :max-points}))
     (on-error)))
 
-(defn handle-build [scoreboard repo build]
-  (let [owner (:owner repo)
-        name (:name repo)
-        number (:pull-request-number build)
+(defn handle-build [scoreboard owner name build]
+  (let [number (:pull-request-number build)
         author (github/pull-request-author owner name number)]
     (doseq [log (travis/build-logs build)
             score (parse-scores log #(println "data missing from build"
@@ -43,15 +41,13 @@
       (send scoreboard score-to-scoreboard name author score))))
 
 (defn handle-repository [scoreboard owner name]
-  (let [repository (travis/repository owner name)]
-    (doseq [build (travis/repository-builds repository)
-            :when (:pull-request build)]
-      (handle-build scoreboard repository build))))
+  (doseq [build (travis/builds owner name)]
+    (handle-build scoreboard owner name build)))
 
 (defn handle-notification [scoreboard request]
-  (let [{:keys [build repository]} (travis/notification-build request)]
+  (let [{:keys [build owner name]} (travis/notification-build request)]
     (when (:pull-request build)
-      (handle-build scoreboard repository build))))
+      (handle-build scoreboard owner name build))))
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 
@@ -60,15 +56,15 @@
 (defroutes routes
   (GET "/scoreboard" []
        (let [scores (scoreboard/total-scores @scoreboard)]
-         (-> (r/response (json/write-str scores))
+         (-> (r/response (json/generate-string scores))
              (r/content-type "application/json"))))
   (GET "/scoreboard/:repo" [repo]
        (let [scores (scoreboard/total-scores-by-repo @scoreboard repo)]
-         (-> (r/response (json/write-str scores))
+         (-> (r/response (json/generate-string scores))
              (r/content-type "application/json"))))
   (GET "/users/:user" [user]
        (let [scores (scoreboard/user-scores @scoreboard user)]
-         (-> (r/response (json/write-str scores))
+         (-> (r/response (json/generate-string scores))
              (r/content-type "application/json"))))
   (GET "/notifications" []
        (r/response @notif))

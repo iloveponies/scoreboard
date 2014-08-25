@@ -1,15 +1,13 @@
 (ns scoreboard.travis
-  (:require [clojure.data.json :as json]
-            [rate-gate.core :as rate]
+  (:require [cheshire.core :as json]
             [scoreboard.util :as util]))
 
 (def http
-  (rate/rate-limit
-   (fn [method url parameters]
-     (let [p {:query-params parameters
-              :headers {"Accept" "application/json; version=2"}}]
-       (util/retrying-http method url p [1 2 8])))
-   5000 (* 1000 60 60)))
+  (fn [method url parameters]
+    (let [p {:query-params parameters
+             :headers {"Accept" "application/vnd.travis-ci.2+json"
+                       "User-Agent" "ILovePonies/1.0.0"}}]
+      (util/retrying-http method url p [1 2 8]))))
 
 (defn api [parameters & url-fragments]
   (let [url (apply str "https://api.travis-ci.org/"
@@ -17,80 +15,35 @@
     (http :get url parameters)))
 
 (defn parse-json [s]
-  (json/read-str s :key-fn #(keyword (.replace % "_" "-"))))
+  (json/parse-string s (fn [k] (keyword (.replace k "_" "-")))))
 
 (defn json-api [parameters & url-fragments]
   (parse-json (:body (apply api parameters url-fragments))))
 
-(defn parse-build [build]
-  (let [pr (fn [build]
-             (if (not (contains? build :pull-request))
-               (assoc build :pull-request (= (:type build) "pull_request"))
-               build))
-        pr-number (fn [build]
-                    (if (not (contains? build :pull-request-number))
-                      (assoc build
-                        :pull-request-number (-> (:compare-url build)
-                                                 (.split "/")
-                                                 last
-                                                 Long/valueOf))
-                      build))
-        job-ids (fn [build]
-                  (if (not (contains? build :job-ids))
-                    (assoc build :job-ids (map :id (:matrix build)))
-                    build))]
-    (-> build
-        pr
-        pr-number
-        job-ids
-        (update-in [:number] #(Long/valueOf %)))))
-
 (defn build [id]
-  (parse-build (:build (json-api {} "builds" id))))
+  (:build (json-api {} "builds" id)))
 
-(defn parse-repository [repository]
-  (let [[owner name] (if (contains? repository :slug)
-                       (.split (:slug repository) "/")
-                       [(:owner-name repository) (:name repository)])]
-    (-> repository
-        (dissoc :slug)
-        (dissoc :owner-name)
-        (assoc :owner owner)
-        (assoc :name name))))
-
-(defn repository
-  ([id] (parse-repository (:repo (json-api {} "repos" id))))
-  ([owner name] (parse-repository (:repo (json-api {} "repos" owner name)))))
-
-(defn repository-builds
-  ([repository]
-     (loop [builds []
-            chunk (repository-builds repository Long/MAX_VALUE)]
+(defn builds
+  ([owner name]
+     (loop [bs []
+            chunk (builds owner name Long/MAX_VALUE)]
        (if (empty? chunk)
-         builds
-         (recur (concat builds chunk)
-                (repository-builds repository
-                                   (apply min (map :number chunk)))))))
-  ([repository after]
-     (map parse-build
-          (:builds (json-api {"after_number" after}
-                             "repos"
-                             (:owner repository)
-                             (:name repository)
-                             "builds")))))
-
-(defn log [job-id]
-  (:body (api {} "jobs" job-id "log")))
+         bs
+         (let [min-number (->> (map :number chunk)
+                               (map #(Long/valueOf %))
+                               (apply min))]
+           (recur (concat bs chunk) (builds owner name min-number))))))
+  ([owner name after]
+     (:builds (json-api {"event_type" "pull_request"
+                         "after_number" (str after)}
+                        "repos" owner name "builds"))))
 
 (defn build-logs [build]
   (for [job-id (:job-ids build)]
-    (log job-id)))
-
-(defn build-repository [build]
-  (repository (:repository-id build)))
+    (:body (api {} "jobs" (str job-id) "log"))))
 
 (defn notification-build [request]
-  (let [build (parse-build (parse-json (:payload (:params request))))
-        repository (parse-repository (:repository build))]
-    {:build build
-     :repository repository}))
+  (let [n (parse-json (:payload (:params request)))]
+    {:build (build (:id n))
+     :owner (:owner-name (:repository n))
+     :name (:name (:repository n))}))
