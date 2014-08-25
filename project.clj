@@ -2,6 +2,7 @@
   :description "scoreboard"
   :url "http://github.com/iloveponies/scoreboard"
   :dependencies [[org.clojure/clojure "1.5.1"]
+                 [tentacles "0.2.5"]
                  [org.clojure/data.json "0.2.3"]
                  [rate-gate "1.3.1"]
                  [ring/ring-core "1.2.1"]
