@@ -24,10 +24,7 @@
 
 (defn parse-scores [^String log on-error]
   (if-let [data (second (.split log "midje-grader:data"))]
-    (for [score (try (json/parse-string (.trim data) keyword)
-                     (catch Exception e
-                       (println data)
-                       (throw e)))]
+    (for [score (json/parse-string (.trim data) keyword)]
       (clojure.set/rename-keys score {:got :points
                                       :out-of :max-points}))
     (on-error)))
