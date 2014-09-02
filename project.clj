@@ -15,4 +15,5 @@
                    :plugins [[lein-midje "3.1.1"]]}}
   :uberjar-name "scoreboard-standalone.jar"
   :min-lein-version "2.0.0"
-  :main scoreboard.core)
+  :main scoreboard.core
+  :aot [scoreboard.core])
