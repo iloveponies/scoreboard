@@ -32,7 +32,8 @@
 (defn handle-build [scoreboard owner name build]
   (let [number (:pull-request-number build)
         author (github/pull-request-author owner name number)]
-    (doseq [log (travis/build-logs build)
+    (doseq [log (try (travis/build-logs build)
+                     (catch Exception e (println e) nil))
             score (parse-scores log #(println "data missing from build"
                                               (:id build)))]
       (send scoreboard score-to-scoreboard name author score))))

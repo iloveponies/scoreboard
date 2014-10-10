@@ -41,11 +41,12 @@
                         "repos" owner name "builds"))))
 
 (defn build-logs [build]
-  (for [job-id (:job-ids build)
-        :let [r (api {} "jobs" (str job-id) "log")]]
-    (if (.contains (get (:headers r) "content-type") "text/plain")
-      (:body r)
-      (get-in (parse-json (:body r)) [:log :body]))))
+  (doall
+   (for [job-id (:job-ids build)
+         :let [r (api {} "jobs" (str job-id) "log")]]
+     (if (.contains (get (:headers r) "content-type") "text/plain")
+       (:body r)
+       (get-in (parse-json (:body r)) [:log :body])))))
 
 (defn notification-build [request]
   (let [n (parse-json (:payload (:params request)))]
