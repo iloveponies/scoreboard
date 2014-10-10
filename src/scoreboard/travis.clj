@@ -5,7 +5,9 @@
 (def http
   (fn [method url parameters]
     (let [p {:query-params parameters
-             :headers {"Accept" "application/vnd.travis-ci.2+json"
+             :headers {"Accept" (str "application/vnd.travis-ci.2+json"
+                                     ", application/json"
+                                     ", text/plain")
                        "User-Agent" "ILovePonies/1.0.0"}}]
       (util/retrying-http method url p [1 2 8]))))
 
