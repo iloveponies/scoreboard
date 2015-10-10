@@ -8,6 +8,7 @@
             [ring.util.response :as r]
             [compojure.handler :as handler]
             [compojure.route :as route]
+            [clojure.core.async :as a]
             [cheshire.core :as json])
   (:require [scoreboard.scoreboard :as scoreboard]
             [scoreboard.github :as github]
@@ -29,18 +30,27 @@
                                       :out-of :max-points}))
     (on-error)))
 
-(defn handle-build [scoreboard owner name build]
+(defn handle-build [scoreboard github travis owner name build]
   (let [number (:pull-request-number build)
-        author (github/pull-request-author owner name number)]
-    (doseq [log (try (travis/build-logs build)
-                     (catch Exception e (println e) nil))
+        author (let [c (a/chan 1)]
+                 (a/>!! github (github/pull-request-author owner name number c))
+                 (:ok (a/<!! c)))]
+    (doseq [log (map #(let [log (a/chan 1)]
+                        (a/>!! travis (travis/log % log))
+                        (:ok (a/<!! log)))
+                     (:job-ids build))
             score (parse-scores log #(println "data missing from build"
                                               (:id build)))]
+      (println author score)
       (send scoreboard score-to-scoreboard name author score))))
 
-(defn handle-repository [scoreboard owner name]
-  (doseq [build (travis/builds owner name)]
-    (handle-build scoreboard owner name build)))
+(defn handle-repository [scoreboard github travis owner name]
+  (let [builds (a/chan)]
+    (a/>!! travis (travis/builds owner name builds))
+    (loop [build (a/<!! builds)]
+      (when build
+        (handle-build scoreboard github travis owner name (:ok build))
+        (recur (a/<!! builds))))))
 
 (defn handle-notification [scoreboard request]
   (let [{:keys [build owner name]} (travis/notification-build request)]
@@ -86,13 +96,11 @@
   (let [handler (-> routes
                     wrap-keyword-params
                     wrap-params
-                    (wrap-cors :access-control-allow-origin #".*"))]
+                    (wrap-cors :access-control-allow-origin #".*"))
+        github (github/->github 1)
+        travis (travis/->travis 2)]
     (server/run-jetty handler {:port (Integer. port) :join? false})
     (doseq [chapter chapters]
-      (println "preheating author cache," chapter)
-      (github/init-cache "iloveponies" chapter))
-    (doseq [chapter chapters]
       (println "populating" chapter)
-      (handle-repository scoreboard "iloveponies" chapter))
-    (github/clear-cache)
+      (handle-repository scoreboard github travis "iloveponies" chapter))
     (println "scoreboard populated")))

@@ -1,55 +1,134 @@
 (ns scoreboard.travis
-  (:require [cheshire.core :as json]
+  (:require [org.httpkit.client :as http]
+            [clojure.core.async :as a]
+            [clojure.string :refer [join]]
             [scoreboard.util :as util]))
 
-(def http
-  (fn [method url parameters]
-    (let [p {:query-params parameters
-             :headers {"Accept" (str "application/vnd.travis-ci.2+json"
-                                     ", application/json"
-                                     ", text/plain")
-                       "User-Agent" "ILovePonies/1.0.0"}}]
-      (util/retrying-http method url p [1 2 8]))))
+(def api-root "https://api.travis-ci.org")
 
-(defn api [parameters & url-fragments]
-  (let [url (apply str "https://api.travis-ci.org/"
-                   (interpose "/" url-fragments))]
-    (http :get url parameters)))
+(def api-headers {"Accept" (str "application/vnd.travis-ci.2+json"
+                                ", application/json"
+                                ", text/plain")})
 
-(defn parse-json [s]
-  (json/parse-string s (fn [k] (keyword (.replace k "_" "-")))))
+(def api-user-agent "ILovePonies/1.0.0")
 
-(defn json-api [parameters & url-fragments]
-  (parse-json (:body (apply api parameters url-fragments))))
+(defn ->travis [number-of-concurrent-request]
+  (let [throttle (a/chan number-of-concurrent-request)]
+    (a/onto-chan throttle (repeat number-of-concurrent-request :ok) false)
+    throttle))
 
-(defn build [id]
-  (:build (json-api {} "builds" id)))
+(defn- throttle-if-needed [throttle headers]
+  (a/go
+    (when (contains? headers :retry-after)
+      (let [t (* 1000 (Long/valueOf (:retry-after headers)))]
+        (println "rate limit reached, reset at"
+                 (new java.util.Date (+ (System/currentTimeMillis) t)))
+        (a/<! (a/timeout t))))
+    (a/>! throttle :ok)))
+
+(defn build [throttle id out]
+  (a/go
+    (a/<! throttle)
+    (http/get (join "/" [api-root "builds" id])
+              {:user-agent api-user-agent
+               :headers api-headers}
+              (fn [{:keys [status headers body error]}]
+                (a/go
+                  (a/>! out
+                        (cond error
+                              (RuntimeException.
+                               (str "fetching build " id " failed")
+                               error)
+                              (= 200 status)
+                              (:build (util/parse-json body))
+                              :else
+                              (RuntimeException.
+                               (str "fetching build " id " failed: " body))))
+                  (a/close! out)
+                  (throttle-if-needed throttle headers)))))
+  out)
+
+(defn- min-build-number [builds]
+  (->> builds
+       (map #(Long/valueOf (:number %)))
+       (apply min)))
 
 (defn builds
-  ([owner name]
-     (loop [bs []
-            chunk (builds owner name Long/MAX_VALUE)]
-       (if (empty? chunk)
-         bs
-         (let [min-number (->> (map :number chunk)
-                               (map #(Long/valueOf %))
-                               (apply min))]
-           (recur (concat bs chunk) (builds owner name min-number))))))
-  ([owner name after]
-     (:builds (json-api {"event_type" "pull_request"
-                         "after_number" (str after)}
-                        "repos" owner name "builds"))))
+  ([throttle owner repository out]
+   (builds throttle owner repository Long/MAX_VALUE false out))
+  ([throttle owner repository after paginate? out]
+   (a/go
+     (http/get (join "/" [api-root "repos" owner repository "builds"])
+               {:user-agent api-user-agent
+                :headers api-headers
+                :query-params {"event_type" "pull_request"
+                               "after_number" (str after)}}
+               (fn [{:keys [status headers body error]}]
+                 (a/go
+                   (if (= 200 status)
+                     (let [bs (:builds (util/parse-json body))]
+                       (a/onto-chan out bs false)
+                       (if (or paginate? (empty? bs))
+                         (do (a/close! out)
+                             (a/>! throttle :ok))
+                         (builds throttle
+                                 owner
+                                 repository
+                                 (min-build-number bs)
+                                 paginate?
+                                 out)))
+                     (do
+                       (a/>! out
+                             (if error
+                               (RuntimeException.
+                                (str "fetching builds for "
+                                     owner "/" repository "failed")
+                                error)
+                               (RuntimeException.
+                                (str "fetching builds for "
+                                     owner "/" repository
+                                     "failed: " body))))
+                       (a/close! out)
+                       (throttle-if-needed throttle headers)))))))
+   out))
 
-(defn build-logs [build]
-  (doall
-   (for [job-id (:job-ids build)
-         :let [r (api {} "jobs" (str job-id) "log")]]
-     (if (.contains (get (:headers r) "content-type") "text/plain")
-       (:body r)
-       (get-in (parse-json (:body r)) [:log :body])))))
+(defn- parse-log-response [headers body]
+  (if (.contains (:content-type headers)
+                 "text/plain")
+    body
+    (get-in (util/parse-json body)
+            [:log :body])))
 
-(defn notification-build [request]
-  (let [n (parse-json (:payload (:params request)))]
-    {:build (build (:id n))
-     :owner (:owner-name (:repository n))
-     :name (:name (:repository n))}))
+(defn log [throttle job-id out]
+  (a/go
+    (http/get (join "/" [api-root "jobs" job-id "log"])
+              {:user-agent api-user-agent
+               :headers api-headers}
+              (fn [{:keys [status headers body error]}]
+                (a/go
+                  (a/>! out
+                        (cond error
+                              (RuntimeException.
+                               (str "fetching log for job " job-id " failed")
+                               error)
+                              (= 200 status)
+                              (parse-log-response headers body)
+                              :else
+                              (RuntimeException.
+                               (str "fetching log for job " job-id
+                                    " failed: " body))))
+                  (a/close! out)
+                  (throttle-if-needed throttle headers)))))
+  out)
+
+(defn notification-build [travis request out]
+  (a/go
+    (try
+      (let [n (util/parse-json (:payload (:params request)))]
+        (a/>! out {:build (util/<? (build travis (:id n) (a/chan 1)))
+                   :owner (:owner-name (:repository n))
+                   :name (:name (:repository n))}))
+      (catch Exception e
+        (a/>! out e)))
+    (a/close! out))
+  out)

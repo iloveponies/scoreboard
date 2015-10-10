@@ -1,20 +1,30 @@
 (ns scoreboard.util
-  (:require [clj-http.client :as http]))
+  (:require [clojure.core.async :as a]
+            [clojure.core.match :refer [match]]
+            [cheshire.core :as json]))
 
-(defn retry [retries on-fail thunk]
-  (if-let [result (try
-                    [(thunk)]
-                    (catch Exception e
-                      (when (empty? retries)
-                        (throw e))))]
-    (result 0)
-    (do (on-fail)
-        (Thread/sleep (first retries))
-        (recur (rest retries) on-fail thunk))))
+(defn parse-json [s]
+  (json/parse-string s (fn [k] (keyword (.replace k "_" "-")))))
 
-(defn retrying-http [method url parameters retries]
-  (let [methods {:get http/get
-                 :post http/post}]
-    (retry retries
-           #(println "http request to" url "failed")
-           #((get methods method) url parameters))))
+(defn throw-err [e]
+  (when (instance? Throwable e) (throw e))
+  e)
+
+(defmacro <? [channel]
+  `(throw-err (a/<! ~channel)))
+
+(defn try-times [n f out]
+  (a/go-loop [n n]
+    (let [c (f (a/chan))]
+      (if-let [error (loop []
+                       (when-let [m (a/<! c)]
+                         (if (instance? Throwable m)
+                           m
+                           (do (a/>! out m)
+                               (recur)))))]
+        (if (< 0 n)
+          (recur (dec n))
+          (do (a/>! out error)
+              (a/close! out)))
+        (a/close! out))))
+  out)
