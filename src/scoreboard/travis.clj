@@ -9,7 +9,7 @@
                                      ", application/json"
                                      ", text/plain")
                        "User-Agent" "ILovePonies/1.0.0"}}]
-      (util/retrying-http method url p [1 2 8]))))
+      (util/retrying-http method url p [100 200 800 60000]))))
 
 (defn api [parameters & url-fragments]
   (let [url (apply str "https://api.travis-ci.org/"
