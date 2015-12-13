@@ -139,5 +139,5 @@
                     (wrap-cors :access-control-allow-origin #".*"))]
     (server/run-jetty handler {:port (Integer. port) :join? false})
     (doseq [chapter chapters]
-      (handle-repository scoreboard github travis "iloveponies" chapter))
+      (a/<!! (handle-repository scoreboard github travis "iloveponies" chapter)))
     (println "scoreboard populated")))
