@@ -70,14 +70,14 @@
                      (let [bs (:builds (util/parse-json body))]
                        (a/onto-chan out bs false)
                        (if (or paginate? (empty? bs))
-                         (do (a/close! out)
-                             (a/>! throttle :ok))
+                         (a/close! out)
                          (builds throttle
                                  owner
                                  repository
                                  (min-build-number bs)
                                  paginate?
-                                 out)))
+                                 out))
+                       (a/>! throttle :ok))
                      (do
                        (a/>! out
                              (if error
