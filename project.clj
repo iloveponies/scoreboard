@@ -1,15 +1,15 @@
 (defproject scoreboard "0.1.0-SNAPSHOT"
   :description "scoreboard"
   :url "http://github.com/iloveponies/scoreboard"
-  :dependencies [[org.clojure/clojure "1.5.1"]
-                 [tentacles "0.2.5"]
-                 [cheshire "5.3.1"]
-                 [rate-gate "1.3.1"]
+  :dependencies [[org.clojure/clojure "1.7.0"]
+                 [org.clojure/core.match "0.3.0-alpha4"]
+                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [cheshire "5.5.0"]
+                 [http-kit "2.1.18"]
                  [ring/ring-core "1.2.1"]
                  [ring/ring-devel "1.2.1"]
                  [ring/ring-jetty-adapter "1.2.1"]
                  [ring-cors "0.1.0"]
-                 [clj-http "0.7.7"]
                  [compojure "1.1.5"]]
   :profiles {:dev {:dependencies [[midje "1.5.1"]]
                    :plugins [[lein-midje "3.1.1"]]}}
