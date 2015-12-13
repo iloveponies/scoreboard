@@ -3,7 +3,7 @@
   :url "http://github.com/iloveponies/scoreboard"
   :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/core.match "0.3.0-alpha4"]
-                 [org.clojure/core.async "0.1.346.0-17112a-alpha"]
+                 [org.clojure/core.async "0.2.374"]
                  [cheshire "5.5.0"]
                  [http-kit "2.1.18"]
                  [ring/ring-core "1.2.1"]
