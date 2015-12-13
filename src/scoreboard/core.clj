@@ -13,7 +13,8 @@
   (:require [scoreboard.scoreboard :as scoreboard]
             [scoreboard.github :as github]
             [scoreboard.travis :as travis]
-            [scoreboard.util :as util]))
+            [scoreboard.util :as util])
+  (:gen-class))
 
 (defn parse-scores [^String log]
   (if-let [data (second (.split log "midje-grader:data"))]
