@@ -58,6 +58,7 @@
    (builds throttle owner repository Long/MAX_VALUE false out))
   ([throttle owner repository after paginate? out]
    (a/go
+     (a/<! throttle)
      (http/get (join "/" [api-root "repos" owner repository "builds"])
                {:user-agent api-user-agent
                 :headers api-headers
@@ -101,6 +102,7 @@
 
 (defn log [throttle job-id out]
   (a/go
+    (a/<! throttle)
     (http/get (join "/" [api-root "jobs" job-id "log"])
               {:user-agent api-user-agent
                :headers api-headers}
