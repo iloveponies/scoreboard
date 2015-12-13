@@ -75,11 +75,11 @@
 (defn handle-repository [scoreboard github travis owner name]
   (a/go
     (println (str "handling repository " owner "/" name))
-    (let [scores (a/chan)]
-      (a/pipeline-async 1
+    (let [scores (a/chan 500)]
+      (a/pipeline-async 25
                         scores
                         (partial handle-build github travis owner name)
-                        (travis/builds travis owner name (a/chan)))
+                        (travis/builds travis owner name (a/chan 25)))
       (loop [score (a/<! scores)]
         (when score
           (send scoreboard scoreboard/add-score score)
