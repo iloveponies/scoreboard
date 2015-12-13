@@ -94,8 +94,10 @@
         (handle-build scoreboard github travis owner name build)))))
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
-(def github (github/->github 4))
-(def travis (travis/->travis 4))
+(def github (github/->github
+             (Integer/valueOf (or (System/getenv "GITHUB_CONCURRENCY") "1"))))
+(def travis (travis/->travis
+             (Integer/valueOf (or (System/getenv "TRAVIS_CONCURRENCY") "1"))))
 
 (def notif (atom ""))
 
