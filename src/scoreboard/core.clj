@@ -45,6 +45,14 @@
                       (a/to-chan (:job-ids build)))
     logs))
 
+(defn- error-messages [e]
+  (loop [msg (.getMessage e)
+         cause (.getCause e)]
+    (if cause
+      (recur (str msg "\n" (.getMessage cause))
+             (.getCause cause))
+      msg)))
+
 (defn handle-build [github travis owner name build out]
   (a/go
     (try
@@ -61,7 +69,7 @@
                          :max-points (:max-points score))))
             (recur (a/<! logs)))))
       (catch Exception e
-          (println "error while handling build" (:id build) e)))
+        (println "error while handling build" (:id build) (error-messages e))))
     (a/close! out)))
 
 (defn handle-repository [scoreboard github travis owner name]
@@ -76,7 +84,7 @@
         (when score
           (send scoreboard scoreboard/add-score score)
           (recur (a/<! scores)))))
-    (println (str owner "/" name " handlede"))))
+    (println (str owner "/" name " handled"))))
 
 (defn handle-notification [scoreboard github travis request]
   (a/go
