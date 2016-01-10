@@ -63,7 +63,7 @@
                    :result result}))))]
     (util/submit travis c)))
 
-(defn min-build-number [builds]
+(defn- min-build-number [builds]
   (->> builds
        (map #(Long/valueOf (:number %)))
        (apply min)))
@@ -72,7 +72,16 @@
   ([travis owner repository]
    (builds travis owner repository Long/MAX_VALUE))
   ([travis owner repository after]
-   (letfn [(c []
+   (letfn [(->ok [body]
+             (let [bs (:builds (util/parse-json body))
+                   min (if (empty? bs)
+                         1
+                         (min-build-number bs))]
+               (if (< 1 min)
+                 {:ok {:result bs
+                       :next (fn [] (builds travis owner repository min))}}
+                 {:ok {:result bs}})))
+           (c []
              (let [url (join "/" [api-root "repos" owner repository "builds"])
                    params {:user-agent api-user-agent
                            :headers api-headers
@@ -82,7 +91,7 @@
                (when (some? error)
                  (throw-unexpected-error error url))
                (let [result (cond (= 200 status)
-                                  {:ok (:builds (util/parse-json body))}
+                                  (->ok body)
                                   (rate-limit-reached? headers)
                                   (->rate-limit-reached
                                    url

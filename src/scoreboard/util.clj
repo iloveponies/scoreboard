@@ -49,9 +49,13 @@
         (catch RejectedExecutionException e
           (concurrency-limit-reached (.getMaximumPoolSize pool)))))))
 
-(defn try-times [n f]
-  (loop [n 3]
+(defn try-times [times f]
+  (loop [n times]
     (match [(f)]
+           [{:ok {:result result
+                  :next next}}]
+           {:result result
+            :next (fn [] (try-times times next))}
            [{:ok result}]
            result
            [{:error msg
@@ -65,3 +69,14 @@
                  (Thread/sleep 2000)
                  (recur (dec n)))
              (throw (RuntimeException. msg))))))
+
+(defn collect [aggregate initial f]
+  (loop [results initial
+         thunk f]
+    (match [(thunk)]
+           [{:result result
+             :next next}]
+           (recur (aggregate results result)
+                  next)
+           [{:result result}]
+           (aggregate results result))))

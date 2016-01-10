@@ -43,17 +43,13 @@
 
 (defn handle-repository [github travis owner name]
   (println (str owner "/" name))
-  (loop [scores []
-         builds (util/try-times 3 (fn [] (travis/builds travis owner name)))]
-    (if (empty? builds)
-      scores
-      (let [after (travis/min-build-number builds)]
-        (recur
-         (concat scores
-                 (for [build builds
-                       score (handle-build github travis owner name build)]
-                   score))
-         (util/try-times 3 (fn [] (travis/builds travis owner name after))))))))
+  (let [builds
+        (util/collect
+         concat []
+         (fn [] (util/try-times 3 (fn [] (travis/builds travis owner name)))))]
+    (for [build builds
+          score (handle-build github travis owner name build)]
+      score)))
 
 (defn handle-notification [github travis scoreboard request]
   (let [{:keys [build owner name]}
