@@ -1,18 +1,14 @@
 (ns scoreboard.github
   (:require [org.httpkit.client :as http]
-            [clojure.core.async :as a]
             [clojure.core.match :refer [match]]
             [clojure.string :refer [join split]]
             [scoreboard.util :as util]))
 
-(def api-root "https://api.github.com")
-
 (def auth (System/getenv "GITHUB_AUTH"))
 
-(defn ->github [number-of-concurrent-request]
-  (let [throttle (a/chan number-of-concurrent-request)]
-    (a/onto-chan throttle (repeat number-of-concurrent-request :ok) false)
-    throttle))
+(def api-root "https://api.github.com")
+
+(def api-params (if auth {:basic-auth (split auth #":")} {}))
 
 (defn- rate-limit-reached? [headers]
   (= "0" (:x-ratelimit-remaining headers)))
@@ -20,50 +16,47 @@
 (defn- rate-limit-reset [headers]
   (* 1000 (Long/valueOf (:x-ratelimit-reset headers))))
 
-(defn- throttle-if-needed [throttle headers]
-  (a/go
-    (when (rate-limit-reached? headers)
-      (let [reset (rate-limit-reset headers)]
-        (println "rate limit reached, reset at"
-                 (new java.util.Date reset))
-        (a/<! (a/timeout (- reset (System/currentTimeMillis))))))
-    (a/>! throttle :ok)))
+(def ->github util/->rate-limited-pool)
 
-(defn pull-request [throttle owner repository number out]
-  (a/go
-    (a/<! throttle)
-    (http/get (join "/" [api-root "repos" owner repository "pulls" number])
-              (if auth {:basic-auth (split auth #":")} {})
-              (fn [{:keys [status headers body error]}]
-                (a/go
-                  (a/>! out
-                        (cond error
-                              (RuntimeException.
-                               (str "fetching pull request "
-                                    owner "/" repository "/" number " failed")
-                               error)
-                              (= 200 status)
-                              (util/parse-json body)
-                              :else
-                              (RuntimeException.
-                               (str "fetching pull request "
-                                    owner "/" repository "/" number
-                                    " failed: "
-                                    (:message (util/parse-json body))))))
-                  (a/close! out)
-                  (throttle-if-needed throttle headers)))))
-  out)
+(defn- ->ok [body]
+  {:ok (util/parse-json body)})
 
-(defn pull-request-author [throttle owner repository number out]
-  (a/go
-    (a/>! out
-          (try
-            (get-in (util/<? (pull-request throttle owner repository number (a/chan 1)))
-                    [:user :login])
-            (catch Exception e
-              (RuntimeException.
-               (str "fetching author of pull request "
-                    owner "/" repository "/" number " failed")
-               e))))
-    (a/close! out))
-  out)
+(defn- ->rate-limit-reached [url next-reset]
+  {:error (format "Rate limit reached, next reset %s: %s"
+                  (java.util.Date. next-reset) url)
+   :next-reset next-reset})
+
+(defn- ->error [status url body]
+  {:error (format "Error %d, %s: %s"
+                  status (:message (util/parse-json body)) url)})
+
+(defn- throw-unexpected-error [error url]
+  (throw (RuntimeException. (format "Unexpected error: %s" url)
+                            error)))
+
+(defn pull-request [github owner repository number]
+  (letfn [(c []
+            (let [url (join "/" [api-root "repos" owner repository "pulls" number])
+                  {:keys [status headers body error]} @(http/get url api-params)]
+              (when (some? error)
+                (throw-unexpected-error error url))
+              (let [result (cond (= 200 status)
+                                 (->ok body)
+                                 (and (= 403 status) (rate-limit-reached? headers))
+                                 (->rate-limit-reached
+                                  url
+                                  (rate-limit-reset headers))
+                                 :else
+                                 (->error status url body))]
+                (if (rate-limit-reached? headers)
+                  {:rate-limit-reached? true
+                   :next-reset (rate-limit-reset headers)
+                   :result result}
+                  {:rate-limit-reached? false
+                   :result result}))))]
+    (util/submit github c)))
+
+(defn pull-request-author [github owner repository number]
+  (match [(pull-request github owner repository number)]
+         [{:ok {:user {:login author}}}] {:ok author}
+         [e] e))

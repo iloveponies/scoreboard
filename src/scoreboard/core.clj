@@ -8,7 +8,6 @@
             [ring.util.response :as r]
             [compojure.handler :as handler]
             [compojure.route :as route]
-            [clojure.core.async :as a]
             [cheshire.core :as json])
   (:require [scoreboard.scoreboard :as scoreboard]
             [scoreboard.github :as github]
@@ -23,75 +22,45 @@
                                       :out-of :max-points}))
     (throw (RuntimeException. "no score data found in log"))))
 
-(defn- fetch-author [github owner repository build]
-  (let [number (:pull-request-number build)]
-    (util/try-times 3
-                    #(github/pull-request-author github
-                                                 owner
-                                                 repository
-                                                 number
-                                                 %)
-                    (a/chan 1))))
+(defn handle-build [github travis owner name build]
+  (let [number (:pull-request-number build)
+        author (util/try-times 3 (fn [] (github/pull-request-author github
+                                                                    owner
+                                                                    name
+                                                                    number)))]
+    (for [job-id (:job-ids build)
+          :let [log (util/try-times 3 (fn [] (travis/log travis job-id)))]
+          score (try
+                  (parse-scores log)
+                  (catch Exception e
+                    (println (:id build) (.getMessage e))))]
+      (scoreboard/->score
+       :user author
+       :repo name
+       :exercise (:exercise score)
+       :points (:points score)
+       :max-points (:max-points score)))))
 
-(defn- fetch-logs [travis build]
-  (let [job-count (count (:job-ids build))
-        logs (a/chan job-count)]
-    (a/pipeline-async job-count
-                      logs
-                      (fn [job-id out]
-                        (util/try-times 3
-                                        #(travis/log travis job-id %)
-                                        out))
-                      (a/to-chan (:job-ids build)))
-    logs))
+(defn handle-repository [github travis owner name]
+  (println (str owner "/" name))
+  (loop [scores []
+         builds (util/try-times 3 (fn [] (travis/builds travis owner name)))]
+    (if (empty? builds)
+      scores
+      (let [after (travis/min-build-number builds)]
+        (recur
+         (concat scores
+                 (for [build builds
+                       score (handle-build github travis owner name build)]
+                   score))
+         (util/try-times 3 (fn [] (travis/builds travis owner name after))))))))
 
-(defn- error-messages [e]
-  (loop [msg (.getMessage e)
-         cause (.getCause e)]
-    (if cause
-      (recur (str msg "\n" (.getMessage cause))
-             (.getCause cause))
-      msg)))
-
-(defn handle-build [github travis owner name build out]
-  (a/go
-    (try
-      (let [author (util/<? (fetch-author github owner name build))
-            logs (fetch-logs travis build)]
-        (loop [log (util/<? logs)]
-          (when log
-            (doseq [score (parse-scores log)]
-              (a/>! out (scoreboard/->score
-                         :user author
-                         :repo name
-                         :exercise (:exercise score)
-                         :points (:points score)
-                         :max-points (:max-points score))))
-            (recur (a/<! logs)))))
-      (catch Exception e
-        (println "error while handling build" (:id build) (error-messages e))))
-    (a/close! out)))
-
-(defn handle-repository [scoreboard github travis owner name]
-  (a/go
-    (println (str "handling repository " owner "/" name))
-    (let [scores (a/chan 500)]
-      (a/pipeline-async 25
-                        scores
-                        (partial handle-build github travis owner name)
-                        (travis/builds travis owner name (a/chan 25)))
-      (loop [score (a/<! scores)]
-        (when score
-          (send scoreboard scoreboard/add-score score)
-          (recur (a/<! scores)))))
-    (println (str owner "/" name " handled"))))
-
-(defn handle-notification [scoreboard github travis request]
-  (a/go
-    (let [{:keys [build owner name]}
-          (util/<? (travis/notification-build travis request (a/chan 1)))]
-      (when (:pull-request build)
-        (handle-build scoreboard github travis owner name build)))))
+(defn handle-notification [github travis scoreboard request]
+  (let [{:keys [build owner name]}
+        (util/try-times 3 (fn [] (travis/notification-build travis request)))]
+    (when (:pull-request build)
+      (doseq [score (handle-build github travis owner name build)]
+        (send scoreboard scoreboard/add-score score)))))
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 (def github (github/->github
@@ -118,7 +87,7 @@
        (r/response @notif))
   (POST "/notifications" request
         (do (swap! notif (constantly (:payload (:params request))))
-            (handle-notification scoreboard github travis request)
+            (handle-notification github travis scoreboard request)
             (r/response "ok")))
   (route/not-found "not found"))
 
@@ -138,6 +107,7 @@
                     wrap-params
                     (wrap-cors :access-control-allow-origin #".*"))]
     (server/run-jetty handler {:port (Integer. port) :join? false})
-    (doseq [chapter chapters]
-      (a/<!! (handle-repository scoreboard github travis "iloveponies" chapter)))
+    (doseq [chapter chapters
+            score (handle-repository github travis "iloveponies" chapter)]
+      (send scoreboard scoreboard/add-score score))
     (println "scoreboard populated")))
