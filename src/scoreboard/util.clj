@@ -21,13 +21,13 @@
    :next-reset (atom 0)})
 
 (defn- rate-limit-reached [next-reset]
-  {:rate-limit-reached (format "Rate limit has been reached. Next reset is %s."
-                               (java.util.Date. next-reset))
+  {:error (format "Rate limit has been reached. Next reset is %s."
+                  (java.util.Date. next-reset))
    :next-reset next-reset})
 
 (defn- concurrency-limit-reached [concurrency-limit]
-  {:concurrency-limit-reached (format "Concurrency limit of %d has been reached."
-                                      concurrency-limit)
+  {:error (format "Concurrency limit of %d has been reached."
+                  concurrency-limit)
    :concurrency-limit concurrency-limit})
 
 (defn submit [{:keys [pool next-reset]} task]
@@ -58,15 +58,13 @@
             :next (fn [] (try-times times next))}
            [{:ok result}]
            result
-           [{:error msg
-             :next-reset next-reset}]
-           (do (println msg)
-               (Thread/sleep (- next-reset (System/currentTimeMillis)))
-               (recur n))
-           [{:error msg}]
+           [({:error msg} :as e)]
            (if (< 0 n)
              (do (println msg)
-                 (Thread/sleep 2000)
+                 (Thread/sleep
+                  (if-let [next-reset (:next-reset e)]
+                    next-reset
+                    2000))
                  (recur (dec n)))
              (throw (RuntimeException. msg))))))
 
