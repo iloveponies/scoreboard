@@ -12,11 +12,6 @@
 
 (def api-user-agent "ILovePonies/1.0.0")
 
-(defn ->travis [number-of-concurrent-request]
-  (let [throttle (a/chan number-of-concurrent-request)]
-    (a/onto-chan throttle (repeat number-of-concurrent-request :ok) false)
-    throttle))
-
 (def ->travis util/->rate-limited-pool)
 
 (defn- rate-limit-reached? [headers]
