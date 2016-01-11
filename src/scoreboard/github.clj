@@ -1,7 +1,7 @@
 (ns scoreboard.github
   (:require [org.httpkit.client :as http]
             [clojure.core.match :refer [match]]
-            [clojure.string :refer [join split]]
+            [clojure.string :refer [join split trim]]
             [scoreboard.util :as util]))
 
 (def auth (System/getenv "GITHUB_AUTH"))
@@ -55,6 +55,45 @@
                   {:rate-limit-reached? false
                    :result result}))))]
     (util/submit github c)))
+
+(defn- parse-link-header [headers]
+  (reduce (fn [links [link rel-type]]
+            (assoc links
+              (keyword (subs rel-type 5 (dec (count rel-type))))
+              (subs link 1 (dec (count link)))))
+          {}
+          (map (fn [rel] (map trim (split (trim rel) #";")))
+               (split (:link headers) #","))))
+
+(defn pull-requests
+  ([github owner repository]
+   (pull-requests github (join "/" [api-root "repos" owner repository "pulls"])))
+  ([github url]
+   (letfn [(->ok [headers body]
+             (let [prs (util/parse-json body)]
+               (if-let [next-link (:next (parse-link-header headers))]
+                 {:ok {:result prs
+                       :next (fn [] (pull-requests github next-link))}}
+                 {:ok {:result prs}})))
+           (c []
+             (let [{:keys [status headers body error]} @(http/get url api-params)]
+               (when (some? error)
+                 (throw-unexpected-error error url))
+               (let [result (cond (= 200 status)
+                                  (->ok headers body)
+                                  (and (= 403 status) (rate-limit-reached? headers))
+                                  (->rate-limit-reached
+                                   url
+                                   (rate-limit-reset headers))
+                                  :else
+                                  (->error status url body))]
+                 (if (rate-limit-reached? headers)
+                   {:rate-limit-reached? true
+                    :next-reset (rate-limit-reset headers)
+                    :result result}
+                   {:rate-limit-reached? false
+                    :result result}))))]
+     (util/submit github c))))
 
 (defn pull-request-author [github owner repository number]
   (match [(pull-request github owner repository number)]
