@@ -22,41 +22,56 @@
                                       :out-of :max-points}))
     (throw (RuntimeException. "no score data found in log"))))
 
-(defn handle-build [github travis owner name build]
-  (let [number (:pull-request-number build)
-        author (util/try-times 3 (fn [] (github/pull-request-author github
-                                                                    owner
-                                                                    name
-                                                                    number)))]
-    (for [job-id (:job-ids build)
-          :let [log (util/try-times 3 (fn [] (travis/log travis job-id)))]
-          score (try
-                  (parse-scores log)
-                  (catch Exception e
-                    (println (:id build) (.getMessage e))))]
-      (scoreboard/->score
-       :user author
-       :repo name
-       :exercise (:exercise score)
-       :points (:points score)
-       :max-points (:max-points score)))))
+(defn handle-build [github travis owner name author build]
+  (for [job-id (:job-ids build)
+        :let [log (util/try-times 3 (fn [] (travis/log travis job-id)))]
+        score (try
+                (parse-scores log)
+                (catch Exception e
+                  (println (:id build) (.getMessage e))))]
+    (scoreboard/->score
+     :user author
+     :repo name
+     :exercise (:exercise score)
+     :points (:points score)
+     :max-points (:max-points score))))
+
+(defn- fetch-builds [travis owner name]
+  (util/collect
+   concat []
+   (fn [] (util/try-times 3 (fn [] (travis/builds travis owner name))))))
+
+(defn- fetch-authors [github owner name]
+  (util/collect
+   (fn [authors prs]
+     (into authors
+           (map (fn [pr]
+                  [(:number pr)
+                   (get-in pr [:user :login])])
+                prs)))
+   {}
+   (fn [] (util/try-times 3 (fn [] (github/pull-requests github owner name))))))
 
 (defn handle-repository [github travis owner name]
   (println (str owner "/" name))
-  (let [builds
-        (util/collect
-         concat []
-         (fn [] (util/try-times 3 (fn [] (travis/builds travis owner name)))))]
+  (let [builds (fetch-builds travis owner name)
+        authors (fetch-authors github owner name)]
     (for [build builds
-          score (handle-build github travis owner name build)]
+          :let [author (get authors (:pull-request-number build))]
+          score (handle-build github travis owner name author build)]
       score)))
 
 (defn handle-notification [github travis scoreboard request]
   (let [{:keys [build owner name]}
         (util/try-times 3 (fn [] (travis/notification-build travis request)))]
     (when (:pull-request build)
-      (doseq [score (handle-build github travis owner name build)]
-        (send scoreboard scoreboard/add-score score)))))
+      (let [number (:pull-request-number build)
+            author (util/try-times 3 (fn [] (github/pull-request-author github
+                                                                        owner
+                                                                        name
+                                                                        number)))]
+        (doseq [score (handle-build github travis owner name author build)]
+          (send scoreboard scoreboard/add-score score))))))
 
 (def scoreboard (agent (scoreboard/->scoreboard)))
 (def github (github/->github
