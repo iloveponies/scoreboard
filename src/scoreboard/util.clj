@@ -37,8 +37,10 @@
         next-reset @next-reset
         c (fn []
             (let [{:keys [rate-limit-reached? next-reset result]} (task)]
+              (log/trace (str "submit c swap " task))
               (when rate-limit-reached?
                 (swap! nr (constantly next-reset)))
+              (log/trace (str "submit c return" task))
               result))]
     (if (< (System/currentTimeMillis) next-reset)
       (rate-limit-reached next-reset)
@@ -47,7 +49,7 @@
         (let [r (.get (.submit #^java.util.concurrent.AbstractExecutorService pool
                                #^java.util.concurrent.Callable c)
                       1 TimeUnit/MINUTES)]
-          (log/trace (str "submit get done " task))
+          (log/trace (str "submit return " task))
           r)
         (catch ExecutionException e
           (throw (.getCause e)))

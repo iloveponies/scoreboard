@@ -1,5 +1,6 @@
 (ns scoreboard.travis
   (:require [org.httpkit.client :as http]
+            [clojure.tools.logging :as log]
             [clojure.core.match :refer [match]]
             [clojure.string :refer [join]]
             [scoreboard.util :as util]))
@@ -110,7 +111,9 @@
 
 (defn log [travis job-id]
   (let [url (join "/" [api-root "jobs" job-id "log"])]
+    (log/trace (str "log " url))
     (letfn [(c []
+              (log/trace (str "log c " url))
               (let [params {:user-agent api-user-agent
                             :headers api-headers}
                     {:keys [status headers body error]} @(http/get url params)]
@@ -124,12 +127,14 @@
                                     (rate-limit-reset headers))
                                    :else
                                    (->error status url body))]
+                  (log/trace (str "log c return " url))
                   (if (rate-limit-reached? headers)
                     {:rate-limit-reached? true
                      :next-reset (rate-limit-reset headers)
                      :result result}
                     {:rate-limit-reached? false
                      :result result}))))]
+      (log/trace (str "log submit " url))
       (util/submit travis c))))
 
 (defn notification-build [travis request]
