@@ -54,7 +54,10 @@
         (catch ExecutionException e
           (throw (.getCause e)))
         (catch RejectedExecutionException e
-          (concurrency-limit-reached (.getMaximumPoolSize pool)))))))
+          (concurrency-limit-reached (.getMaximumPoolSize pool)))
+        (catch Exception e
+          (log/trace (str "submit exception " e " " task))
+          (throw e))))))
 
 (defn try-times [times f]
   (loop [n times]
