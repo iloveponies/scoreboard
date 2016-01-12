@@ -1,6 +1,7 @@
 (ns scoreboard.core
   (:use [compojure.core :only [defroutes GET POST]])
-  (:require [ring.adapter.jetty :as server]
+  (:require [clojure.tools.logging :as log]
+            [ring.adapter.jetty :as server]
             [ring.middleware.reload :as reload]
             [ring.middleware.params :refer [wrap-params]]
             [ring.middleware.keyword-params :refer [wrap-keyword-params]]
@@ -28,7 +29,7 @@
         score (try
                 (parse-scores log)
                 (catch Exception e
-                  (println (:id build) (.getMessage e))))]
+                  (log/warn (:id build) (.getMessage e))))]
     (scoreboard/->score
      :user author
      :repo name
@@ -53,7 +54,7 @@
    (fn [] (util/try-times 3 (fn [] (github/pull-requests github owner name))))))
 
 (defn handle-repository [github travis owner name]
-  (println (str owner "/" name))
+  (log/info (str owner "/" name))
   (let [builds (fetch-builds travis owner name)
         authors (fetch-authors github owner name)]
     (for [build builds
@@ -112,13 +113,23 @@
                "one-function-to-rule-them-all"
                "sudoku"])
 
+(defn setLogLevel [level]
+  (doseq [:let [log-manager (java.util.logging.LogManager/getLogManager)]
+          logger-name (java.util.Collections/list
+                       (.getLoggerNames log-manager))
+          :let [logger (.getLogger log-manager logger-name)]
+          handler (.getHandlers logger)]
+    (.setLevel logger level)
+    (.setLevel handler level)))
+
 (defn -main [port]
   (let [handler (-> routes
                     wrap-keyword-params
                     wrap-params
                     (wrap-cors :access-control-allow-origin #".*"))]
+    (setLogLevel java.util.logging.Level/ALL)
     (server/run-jetty handler {:port (Integer. port) :join? false})
     (doseq [chapter chapters
             score (handle-repository github travis "iloveponies" chapter)]
       (send scoreboard scoreboard/add-score score))
-    (println "scoreboard populated")))
+    (log/info "scoreboard populated")))

@@ -130,11 +130,7 @@
                      :result result}
                     {:rate-limit-reached? false
                      :result result}))))]
-      (try
-        (util/submit travis c)
-        (catch Exception e
-          (println url (.getMessage e))
-          (throw e))))))
+      (util/submit travis c))))
 
 (defn notification-build [travis request]
   (match [(build travis (get-in request [:params :payload :id]))]

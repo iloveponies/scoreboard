@@ -1,6 +1,7 @@
 (ns scoreboard.util
   (:require [cheshire.core :as json]
-            [clojure.core.match :refer [match]])
+            [clojure.core.match :refer [match]]
+            [clojure.tools.logging :as log])
   (:import
    [java.util.concurrent
     ThreadPoolExecutor
@@ -31,6 +32,7 @@
    :concurrency-limit concurrency-limit})
 
 (defn submit [{:keys [pool next-reset]} task]
+  (log/trace (str "submit " task))
   (let [nr next-reset
         next-reset @next-reset
         c (fn []
@@ -41,9 +43,12 @@
     (if (< (System/currentTimeMillis) next-reset)
       (rate-limit-reached next-reset)
       (try
-        (.get (.submit #^java.util.concurrent.AbstractExecutorService pool
-                       #^java.util.concurrent.Callable c)
-              1 TimeUnit/MINUTES)
+        (log/trace (str "submit get " task))
+        (let [r (.get (.submit #^java.util.concurrent.AbstractExecutorService pool
+                               #^java.util.concurrent.Callable c)
+                      1 TimeUnit/MINUTES)]
+          (log/trace (str "submit get done " task))
+          r)
         (catch ExecutionException e
           (throw (.getCause e)))
         (catch RejectedExecutionException e
@@ -60,7 +65,7 @@
            result
            [({:error msg} :as e)]
            (if (< 0 n)
-             (do (println msg)
+             (do (log/warn msg)
                  (Thread/sleep
                   (if-let [next-reset (:next-reset e)]
                     next-reset
