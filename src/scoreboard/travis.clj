@@ -117,6 +117,7 @@
               (let [params {:user-agent api-user-agent
                             :headers api-headers}
                     {:keys [status headers body error]} @(http/get url params)]
+                (log/trace (str "log c get result " status " error " error))
                 (when (some? error)
                   (throw-unexpected-error error url))
                 (let [result (cond (= 200 status)
