@@ -57,9 +57,10 @@
    (fn [] (util/try-times 3 (fn [] (github/pull-requests github owner name))))))
 
 (defn handle-repository [github travis owner name]
-  (log/info (str owner "/" name))
+  (log/info (format "%s/%s" owner name))
   (let [builds (fetch-builds travis owner name)
         authors (fetch-authors github owner name)]
+    (log/info (format "%d builds, %d authors" (count builds) (count authors)))
     (for [build builds
           :let [author (get authors (:pull-request-number build))]
           score (handle-build github travis owner name author build)]
