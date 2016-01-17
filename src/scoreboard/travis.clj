@@ -104,30 +104,27 @@
             [:log :body])))
 
 (defn log [travis job-id]
-  (let [url (join "/" [api-root "jobs" job-id "log"])]
-    (log/info (str "log " url))
-    (letfn [(c []
-              (log/info (str "log c " url))
-              (let [params {:throw-exceptions false
-                            :client-params {"http.useragent" api-user-agent}
-                            :headers api-headers}
-                    {:keys [status headers body]} (http/get url params)
-                    result (cond (= 200 status)
-                                 {:ok (parse-log-response headers body)}
-                                 (rate-limit-reached? headers)
-                                 (->rate-limit-reached
-                                  url
-                                  (rate-limit-reset headers))
-                                 :else
-                                 (->error status url body))]
-                (if (rate-limit-reached? headers)
-                  {:rate-limit-reached? true
-                   :next-reset (rate-limit-reset headers)
-                   :result result}
-                  {:rate-limit-reached? false
-                   :result result})))]
-      (log/info (str "log submit " url))
-      (util/submit travis c))))
+  (letfn [(c []
+            (let [url (join "/" [api-root "jobs" job-id "log"])
+                  params {:throw-exceptions false
+                          :client-params {"http.useragent" api-user-agent}
+                          :headers api-headers}
+                  {:keys [status headers body]} (http/get url params)
+                  result (cond (= 200 status)
+                               {:ok (parse-log-response headers body)}
+                               (rate-limit-reached? headers)
+                               (->rate-limit-reached
+                                url
+                                (rate-limit-reset headers))
+                               :else
+                               (->error status url body))]
+              (if (rate-limit-reached? headers)
+                {:rate-limit-reached? true
+                 :next-reset (rate-limit-reset headers)
+                 :result result}
+                {:rate-limit-reached? false
+                 :result result})))]
+    (util/submit travis c)))
 
 (defn notification-build [travis request]
   (match [(build travis (get-in request [:params :payload :id]))]
