@@ -62,7 +62,10 @@
                        :next (fn [] (pull-requests github (:href next-link)))}}
                  {:ok {:result prs}})))
            (c []
-             (let [{:keys [status links headers body]} (http/get url api-params)
+             (let [{:keys [status links headers body]}
+                   (http/get url (assoc api-params
+                                   :query-params {"per_page" "100"
+                                                  "state" "all"}))
                    result (cond (= 200 status)
                                 (->ok links body)
                                 (and (= 403 status) (rate-limit-reached? headers))
