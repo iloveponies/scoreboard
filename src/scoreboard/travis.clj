@@ -34,7 +34,8 @@
 (defn build [travis id]
   (letfn [(c []
             (let [url (join "/" [api-root "builds" id])
-                  params {:client-params {"http.useragent" api-user-agent}
+                  params {:throw-exceptions false
+                          :client-params {"http.useragent" api-user-agent}
                           :headers api-headers}
                   {:keys [status headers body]} (http/get url params)
                   result (cond (= 200 status)
@@ -73,7 +74,8 @@
                  {:ok {:result bs}})))
            (c []
              (let [url (join "/" [api-root "repos" owner repository "builds"])
-                   params {:client-params {"http.useragent" api-user-agent}
+                   params {:throw-exceptions false
+                           :client-params {"http.useragent" api-user-agent}
                            :headers api-headers
                            :query-params {"event_type" "pull_request"
                                           "after_number" (str after)}}
@@ -106,7 +108,8 @@
     (log/info (str "log " url))
     (letfn [(c []
               (log/info (str "log c " url))
-              (let [params {:client-params {"http.useragent" api-user-agent}
+              (let [params {:throw-exceptions false
+                            :client-params {"http.useragent" api-user-agent}
                             :headers api-headers}
                     {:keys [status headers body]} (http/get url params)
                     result (cond (= 200 status)

@@ -4,11 +4,12 @@
             [clojure.string :refer [join split trim]]
             [scoreboard.util :as util]))
 
-(def auth (System/getenv "GITHUB_AUTH"))
-
 (def api-root "https://api.github.com")
 
-(def api-params (if auth {:basic-auth (split auth #":")} {}))
+(def api-params (if-let [auth (System/getenv "GITHUB_AUTH")]
+                  {:throw-exceptions false
+                   :basic-auth (split auth #":")}
+                  {:throw-exceptions false}))
 
 (defn- rate-limit-reached? [headers]
   (= "0" (:x-ratelimit-remaining headers)))
@@ -29,10 +30,6 @@
 (defn- ->error [status url body]
   {:error (format "Error %d, %s: %s"
                   status (:message (util/parse-json body)) url)})
-
-(defn- throw-unexpected-error [error url]
-  (throw (RuntimeException. (format "Unexpected error: %s" url)
-                            error)))
 
 (defn pull-request [github owner repository number]
   (letfn [(c []
