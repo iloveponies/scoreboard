@@ -25,7 +25,10 @@
 
 (defn handle-build [github travis owner name author build]
   (for [job-id (:job-ids build)
-        :let [log (util/try-times 3 (fn [] (travis/log travis job-id)))]
+        log (try
+              [(util/try-times 3 (fn [] (travis/log travis job-id)))]
+              (catch Exception e
+                (log/warn (:id build) (.getMessage e))))
         score (try
                 (parse-scores log)
                 (catch Exception e
