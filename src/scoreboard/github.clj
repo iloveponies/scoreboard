@@ -54,29 +54,20 @@
                  :result result})))]
     (util/submit github c)))
 
-(defn- parse-link-header [headers]
-  (reduce (fn [links [link rel-type]]
-            (assoc links
-              (keyword (subs rel-type 5 (dec (count rel-type))))
-              (subs link 1 (dec (count link)))))
-          {}
-          (map (fn [rel] (map trim (split (trim rel) #";")))
-               (split (:link headers) #","))))
-
 (defn pull-requests
   ([github owner repository]
    (pull-requests github (join "/" [api-root "repos" owner repository "pulls"])))
   ([github url]
-   (letfn [(->ok [headers body]
+   (letfn [(->ok [links body]
              (let [prs (util/parse-json body)]
-               (if-let [next-link (:next (parse-link-header headers))]
+               (if-let [next-link (:next links)]
                  {:ok {:result prs
-                       :next (fn [] (pull-requests github next-link))}}
+                       :next (fn [] (pull-requests github (:href next-link)))}}
                  {:ok {:result prs}})))
            (c []
-             (let [{:keys [status headers body]} (http/get url api-params)
+             (let [{:keys [status links headers body]} (http/get url api-params)
                    result (cond (= 200 status)
-                                (->ok headers body)
+                                (->ok links body)
                                 (and (= 403 status) (rate-limit-reached? headers))
                                 (->rate-limit-reached
                                  url
