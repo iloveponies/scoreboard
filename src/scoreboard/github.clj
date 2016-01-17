@@ -1,5 +1,5 @@
 (ns scoreboard.github
-  (:require [org.httpkit.client :as http]
+  (:require [clj-http.client :as http]
             [clojure.core.match :refer [match]]
             [clojure.string :refer [join split trim]]
             [scoreboard.util :as util]))
@@ -37,23 +37,21 @@
 (defn pull-request [github owner repository number]
   (letfn [(c []
             (let [url (join "/" [api-root "repos" owner repository "pulls" number])
-                  {:keys [status headers body error]} @(http/get url api-params)]
-              (when (some? error)
-                (throw-unexpected-error error url))
-              (let [result (cond (= 200 status)
-                                 (->ok body)
-                                 (and (= 403 status) (rate-limit-reached? headers))
-                                 (->rate-limit-reached
-                                  url
-                                  (rate-limit-reset headers))
-                                 :else
-                                 (->error status url body))]
-                (if (rate-limit-reached? headers)
-                  {:rate-limit-reached? true
-                   :next-reset (rate-limit-reset headers)
-                   :result result}
-                  {:rate-limit-reached? false
-                   :result result}))))]
+                  {:keys [status headers body]} (http/get url api-params)
+                  result (cond (= 200 status)
+                               (->ok body)
+                               (and (= 403 status) (rate-limit-reached? headers))
+                               (->rate-limit-reached
+                                url
+                                (rate-limit-reset headers))
+                               :else
+                               (->error status url body))]
+              (if (rate-limit-reached? headers)
+                {:rate-limit-reached? true
+                 :next-reset (rate-limit-reset headers)
+                 :result result}
+                {:rate-limit-reached? false
+                 :result result})))]
     (util/submit github c)))
 
 (defn- parse-link-header [headers]
@@ -76,23 +74,21 @@
                        :next (fn [] (pull-requests github next-link))}}
                  {:ok {:result prs}})))
            (c []
-             (let [{:keys [status headers body error]} @(http/get url api-params)]
-               (when (some? error)
-                 (throw-unexpected-error error url))
-               (let [result (cond (= 200 status)
-                                  (->ok headers body)
-                                  (and (= 403 status) (rate-limit-reached? headers))
-                                  (->rate-limit-reached
-                                   url
-                                   (rate-limit-reset headers))
-                                  :else
-                                  (->error status url body))]
-                 (if (rate-limit-reached? headers)
-                   {:rate-limit-reached? true
-                    :next-reset (rate-limit-reset headers)
-                    :result result}
-                   {:rate-limit-reached? false
-                    :result result}))))]
+             (let [{:keys [status headers body]} (http/get url api-params)
+                   result (cond (= 200 status)
+                                (->ok headers body)
+                                (and (= 403 status) (rate-limit-reached? headers))
+                                (->rate-limit-reached
+                                 url
+                                 (rate-limit-reset headers))
+                                :else
+                                (->error status url body))]
+               (if (rate-limit-reached? headers)
+                 {:rate-limit-reached? true
+                  :next-reset (rate-limit-reset headers)
+                  :result result}
+                 {:rate-limit-reached? false
+                  :result result})))]
      (util/submit github c))))
 
 (defn pull-request-author [github owner repository number]

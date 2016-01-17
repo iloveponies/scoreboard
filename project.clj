@@ -6,7 +6,7 @@
                  [org.clojure/core.async "0.2.374"]
                  [org.clojure/tools.logging "0.3.1"]
                  [cheshire "5.5.0"]
-                 [http-kit "2.1.18"]
+                 [clj-http "2.0.0"]
                  [ring/ring-core "1.2.1"]
                  [ring/ring-devel "1.2.1"]
                  [ring/ring-jetty-adapter "1.2.1"]

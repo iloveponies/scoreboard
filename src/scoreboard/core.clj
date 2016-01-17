@@ -127,7 +127,7 @@
                     wrap-keyword-params
                     wrap-params
                     (wrap-cors :access-control-allow-origin #".*"))]
-    (setLogLevel java.util.logging.Level/ALL)
+    (setLogLevel java.util.logging.Level/INFO)
     (server/run-jetty handler {:port (Integer. port) :join? false})
     (doseq [chapter chapters
             score (handle-repository github travis "iloveponies" chapter)]
